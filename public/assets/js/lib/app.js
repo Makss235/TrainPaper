@@ -38,10 +38,11 @@ function cachedMarks(nowMs, lat, lon, offset) {
  *   env(env, sky, info)                — освещение сцены (перекраска материалов, тени), не чаще ~15 раз в секунду
  *   train(current, list, board, info)  — сменился поезд у платформы (или табло обновилось)
  *   tick(now, current, list, info)     — раз в секунду: обратный отсчёт, часы
+ *   uiExtras                           — необязательно: дополнительные группы панели настроек (см. ui.js)
  * }
  */
 export function startApp(view) {
-  const ui = createUI(document.getElementById("ui"), { view: view.name });
+  const ui = createUI(document.getElementById("ui"), { view: view.name, extras: view.uiExtras || [] });
   const source = new BoardSource();
   const info = { id: null, name: "", rzdName: "", lat: 55.75, lon: 37.62, utcOffset: 180, demo: false, stale: false };
   let board = null, currentKey = undefined, pollTimer = 0, loadId = 0;
@@ -182,5 +183,5 @@ export function startApp(view) {
     if (transition || settings().tod === "cycle") requestAnimationFrame(skyLoop);
     else setTimeout(skyLoop, 250);
   })();
-  return { info, refreshSky: () => frameSky(true) };
+  return { info, ui, refreshSky: () => frameSky(true) };
 }

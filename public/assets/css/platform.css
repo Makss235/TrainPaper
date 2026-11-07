@@ -50,14 +50,20 @@
 #bDelay.late { color: #ff5a43; }
 #bDelay.early { color: #6fc8ff; }
 .row.ticker { font-size: 44px; color: #ffd27a; }
-.marquee { display: inline-flex; animation: marquee var(--marquee, 30s) linear infinite; }
+/* бегущая строка: двигает board.js шагами в один светодиод (7 px), без CSS-анимации */
+.marquee { display: inline-flex; will-change: transform; }
 .marquee span { flex: none; white-space: pre; }
-@keyframes marquee { to { transform: translateX(-50%); } }
 .board.empty .row.main { color: #ffb21e; }
-@media (prefers-reduced-motion: reduce) {
-  .marquee { animation: none; }
-}
 
-/* небо (WebGL) и сцена (canvas 2D) под табло и интерфейсом; при загрузке плавно проявляются */
-#gl, #scene { position: absolute; inset: 0; display: block; width: 100%; height: 100%; opacity: 0; transition: opacity 1.4s ease; }
-#poster.ready #gl, #poster.ready #scene { opacity: 1; }
+/* 3D-сцена (WebGL) под табло и интерфейсом; при загрузке плавно проявляется */
+#gl { position: absolute; inset: 0; display: block; width: 100%; height: 100%; opacity: 0; transition: opacity 1.4s ease; }
+#poster.ready #gl { opacity: 1; }
+
+/* инструмент разработчика (?dev=1) */
+.dev { position: absolute; z-index: 30; left: 12px; top: 12px; width: 300px; padding: 10px 12px; border-radius: 10px;
+  background: rgba(12, 16, 26, .86); color: #e9edf3; font: 12px/1.4 ui-monospace, Consolas, monospace; pointer-events: auto; }
+.dev b { color: #ffb21e; font-weight: 600; }
+.dev button { margin: 4px 4px 0 0; padding: 3px 7px; border: 1px solid rgba(255,255,255,.2); border-radius: 6px;
+  background: rgba(255,255,255,.06); color: inherit; font: inherit; cursor: pointer; }
+.dev button.on { background: #e21a1a; border-color: #e21a1a; }
+.dev pre { margin: 6px 0 0; white-space: pre-wrap; color: #b9c4d3; }

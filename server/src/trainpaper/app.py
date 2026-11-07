@@ -19,6 +19,9 @@ MIME_TYPES = {
     ".jpeg": "image/jpeg",
     ".webp": "image/webp",
     ".ico": "image/x-icon",
+    ".gltf": "model/gltf+json",            # свои 3D-модели станций для «Платформы»
+    ".glb": "model/gltf-binary",
+    ".bin": "application/octet-stream",
 }
 
 

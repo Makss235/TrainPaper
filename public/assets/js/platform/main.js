@@ -1,278 +1,217 @@
-// Вид «Платформа»: стоим на платформе и смотрим вдоль пути. Справа — хвост поезда, путь уходит
-// к горизонту, слева над платформой — светодиодное табло.
-// Небо (купол, солнце, луна, облака) рисует WebGL — только небо, плоским фоном. Всё остальное —
-// стилизованная 2D-графика на canvas со своей перспективой: плоские грани в 2–3 тона, тени по
-// геометрии. Камера одна на обоих, поэтому за курсором небо и сцена двигаются вместе.
-import * as THREE from "three";
+// Вид «Платформа» в 3D: стоим на платформе и смотрим вдоль пути. Справа — хвост поезда, путь уходит
+// к горизонту, над платформой — светодиодное табло с поездом, который сейчас прибывает или отправляется.
+//
+// Этот файл только собирает части вместе:
+//   engine/   — движок: рендер по требованию, камера, свет, тени, небо, фильтры кадра;
+//   stations/ — сцены станций (блокаут: объекты, ракурсы, пути, движение поездов);
+//   prefabs/  — объекты сцены (платформа, путь, контактная сеть, фонари, здания, свои модели);
+//   trains/   — вагоны, составы, движение поездов;
+//   weather/  — погода;
+//   board.js  — текст светодиодного табло.
+// Данные табло, время суток и панель настроек — общие с видом «Вагон» (lib/app.js).
 import { startApp } from "../lib/app.js";
-import { clamp } from "../lib/color.js";
-import { initGrain } from "../lib/grain.js";
-import { easeInQuad, easeOutQuad, Motion, swapper } from "../lib/motion.js";
-import { noAnimation } from "../lib/settings.js";
+import { noAnimation, onChange, settings } from "../lib/settings.js";
 import { homography, updateBoard } from "./board.js";
-import { catenaryCasters, drawCatenary, drawGantry } from "./catenary.js";
-import {
-  BOARD, drawBoardFrame, drawBridge, drawFence, drawGround, drawLampGlows, drawLampHeads, drawLamps,
-  drawPlatform, drawTrack, drawTrees, EDGE, FENCE, fenceShadow, floorShadow, PLATFORM_TOP, staticCasters, toSide, TRACK, TRACK2,
-} from "./scene2d.js";
-import { createSky } from "./sky3d.js";
-import { drawTrain, drawWindowSpill, setPlate, SIDE_X, sideQuads, TRAIN_LENGTH, trainCasters } from "./train2d.js";
-import { corners, hull, ShadowLayer, View } from "./view2d.js";
+import { Engine } from "./engine/engine.js";
+import { buildScene } from "./scene/build.js";
+import { STYLE } from "./style.js";
+import { SCENES, sceneFor } from "./stations/index.js";
+import { BoardTraffic, createTraffic } from "./trains/traffic.js";
+import { WEATHER_LABELS } from "./weather/presets.js";
+import { WeatherState } from "./weather/weather.js";
 
 const $ = id => document.getElementById(id);
-const VIEW_AZ = 250;                 // камера смотрит вдоль пути на запад-юго-запад
-const EYE = 2.75;                    // глаза: 1,65 м над платформой высотой 1,1 м
-const D_END = 7.2;                   // хвост поезда в 7,2 м от глаз
-const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+const params = new URLSearchParams(location.search);
 
-/* ---------- небо: WebGL, только фон ---------- */
-
-const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-const glCanvas = renderer.domElement;
-glCanvas.id = "gl";
-const skyScene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(50, 1, .3, 70000);
-camera.rotation.order = "YXZ";
-const sky = createSky(skyScene);
-
-/* ---------- сцена: canvas 2D ---------- */
+/* ---------- движок ---------- */
 
 const canvas = document.createElement("canvas");
-canvas.id = "scene";
-const ctx = canvas.getContext("2d");
-$("poster").prepend(glCanvas, canvas);
-initGrain();
-const v = new View();
-const shadows = { ground: new ShadowLayer(), train: new ShadowLayer(), floor: new ShadowLayer() };
-const CASTERS = [...staticCasters(), ...catenaryCasters(corners)];
-let dpr = 1, dirty = true, trainOffset = 0, trainPresent = false;
+canvas.id = "gl";
+$("poster").prepend(canvas);
+const engine = new Engine(canvas);
+const loop = engine.loop;
+const weather = new WeatherState(settings().weather);
 
-function layout() {
-  const W = innerWidth, H = innerHeight, portrait = H > W;
-  // фокусное расстояние в пикселях; на узком экране угол шире, чтобы табло и вагон помещались
-  const f = portrait ? W * .74 : Math.max(W * .6, H * 1.02);
-  const cx = W * (portrait ? .52 : .41), cy = H * (portrait ? .5 : .44);
-  const fullW = 2 * Math.max(cx, W - cx), fullH = 2 * Math.max(cy, H - cy);
-  renderer.setSize(W, H);
-  camera.fov = 2 * Math.atan(fullH / 2 / f) / Math.PI * 180;
-  camera.aspect = fullW / fullH;
-  camera.setViewOffset(fullW, fullH, fullW / 2 - cx, fullH / 2 - cy, W, H);
-  camera.updateProjectionMatrix();
-  camera.userData.focal = f;
-  camera.userData.pixelRatio = renderer.getPixelRatio();
-  dpr = Math.min(devicePixelRatio, 2);
-  canvas.width = Math.round(W * dpr);
-  canvas.height = Math.round(H * dpr);
-  canvas.style.width = `${W}px`;
-  canvas.style.height = `${H}px`;
-  Object.assign(v, { f, cx, cy, W, H });
-  for (const layer of Object.values(shadows)) layer.resize(W, H, dpr);
-  dirty = true;
+/* ---------- состояние ---------- */
+
+let app = null;                    // lib/app.js: табло, время суток, панель (создаётся ниже)
+const state = {
+  sceneDef: null, world: null, traffic: [], board: null,
+  info: null, list: [], shown: null, current: undefined,
+  env: null, celestial: null, lightKey: "",
+};
+
+/* ---------- табло: HTML натягивается на экран табло в сцене ---------- */
+
+const boardEl = $("board");
+function placeBoard() {
+  const corners = state.world?.boardScreen;
+  if (!corners) { boardEl.style.display = "none"; return; }
+  const pts = corners.map(p => engine.project(p));
+  const [a, b, , d] = corners;
+  // экран смотрит от камеры (видим табло сзади) — прячем, иначе текст был бы зеркальным
+  const n = [0, 0, 0], u = b.map((v, i) => v - a[i]), w = a.map((v, i) => v - d[i]);
+  n[0] = u[1] * w[2] - u[2] * w[1]; n[1] = u[2] * w[0] - u[0] * w[2]; n[2] = u[0] * w[1] - u[1] * w[0];
+  const cam = engine.camera.position, facing = (cam.x - a[0]) * n[0] + (cam.y - a[1]) * n[1] + (cam.z - a[2]) * n[2] > 0;
+  if (!pts.every(Boolean) || !facing) { boardEl.style.display = "none"; return; }
+  const h = Math.round(1200 * Math.hypot(a[1] - d[1], a[2] - d[2]) / Math.hypot(b[0] - a[0], b[2] - a[2]));
+  if (boardEl.style.height !== `${h}px`) boardEl.style.height = `${h}px`;
+  boardEl.style.display = "";
+  boardEl.style.transform = homography(1200, h, ...pts);
+}
+engine.afterRender.push(layers => { if (layers.has("scene")) placeBoard(); });
+
+/* ---------- сцена станции ---------- */
+
+function loadScene(def) {
+  if (state.sceneDef === def) return;
+  for (const t of state.traffic) t.dispose();
+  state.world?.dispose();
+  state.sceneDef = def;
+  const world = buildScene(def, { invalidate: (...l) => loop.invalidate(...l) });
+  state.world = world;
+  engine.scene.add(world.group);
+  engine.rig.setPresets(def.cameras);
+  engine.rig.use(params.get("cam") || "main");
+  engine.rig.update(0);
+  world.activate(engine);
+  if (state.info) world.setStation(state.info);
+  // ?train=fpk-double — показать у платформы этот состав, какой бы поезд ни был в табло (предпросмотр)
+  const forced = params.get("train");
+  const sceneDef = forced ? { ...def, trains: { ...def.trains, rules: [{ when: () => true, use: forced }] } } : def;
+  state.traffic = createTraffic({
+    engine, world, sceneDef,
+    instant: () => noAnimation || document.hidden,
+    onShow(item) {
+      state.shown = item;
+      updateBoard(Date.now(), item, state.list, state.info);
+    },
+  });
+  state.board = state.traffic.find(t => t instanceof BoardTraffic) || null;
+  for (const t of state.traffic) t.start?.();
+  if (state.current !== undefined) state.board?.show(state.current);
+  state.lightKey = "";
+  applyEnvironment();
+  app?.ui.refreshExtras();
+  loop.invalidate("scene", "sky", "shadow");
 }
 
-/* ---------- свет по времени суток ---------- */
+/* ---------- свет, небо, погода ---------- */
 
-let env = null, celestial = null, lightKey = "";
-function computeLight(sunDir) {
-  const alt = celestial.sun.altitude, day = clamp((alt + 4) / 14);
-  // прямой свет солнца плавно нарастает после восхода и гаснет к закату — вместе с ним тени
-  const direct = smoothstep(-1.5, 3.5, alt) * (.86 + .14 * smoothstep(8, 30, alt));
-  const warm = env.sunColor.map(c => c / 255);
-  const sunTint = warm.map(c => c + (1 - c) * .35 * smoothstep(10, 35, alt));
-  const skyCol = env.top.map((c, i) => c + (env.horizon[i] - c) * .55);
-  const gray = (skyCol[0] + skyCol[1] + skyCol[2]) / 3;
-  const skyLight = skyCol.map(c => c * .5 + gray * .5 + 30);
-  const peak = Math.max(...skyLight);
-  const night = clamp((-alt - 4) / 8), twilight = clamp((alt + 7) / 13);
-  const tint = skyLight.map((c, i) => (c / peak) * (1 - night) + [.55, .63, 1][i] * night);
-  const ambI = .16 + .3 * twilight + .34 * day + .05 * night;
-  Object.assign(v.light, {
-    L: [sunDir.x, sunDir.y, sunDir.z],
-    amb: tint.map(t => t * ambI),
-    sun: sunTint.map(t => t * .74 * direct),
-    fog: env.horizon.map(c => c * (.92 + .08 * day)),
-    lamps: env.lamps, direct,
-    reflect: .12 + .72 * day,
-    skyTop: env.top, skyHorizon: env.horizon,
-    plateLight: ambI * .6 + env.lamps * .55,
+function applyEnvironment() {
+  if (!state.env || !state.celestial || !state.sceneDef) return;
+  const env = weather.applyTo(state.env);
+  engine.setEnvironment(env, state.celestial, weather.current, state.sceneDef.viewAzimuth);
+  document.documentElement.style.setProperty("--lamps", engine.light.lamps.toFixed(3));
+  syncSkyAnimations();
+}
+
+/** Облака плывут, пока они есть; дождь и снег идут, пока идут. Иначе — ни одного лишнего кадра. */
+function syncSkyAnimations() {
+  const w = weather.current;
+  const clouds = STYLE.quality.skyFps > 0 && (w.cover > .02 || w.cirrus > .02) && w.cloudOpacity > .01 && !noAnimation;
+  if (clouds && !loop.has("clouds")) {
+    loop.animate("clouds", (now, dt) => {
+      engine.sky.advance(dt, now / 1000, weather.current.wind);
+      loop.invalidate("sky");
+    }, STYLE.quality.skyFps);
+  } else if (!clouds) loop.stop("clouds");
+  const precip = (w.rain > .01 || w.snow > .01) && !noAnimation;
+  if (precip && !loop.has("precip")) {
+    loop.animate("precip", now => {
+      engine.composite.uniforms.uTime.value = now / 1000;
+      loop.invalidate("composite");
+    }, STYLE.quality.precipFps);
+  } else if (!precip) loop.stop("precip");
+}
+
+function setWeather(key, instant = false) {
+  weather.set(key, { instant: instant || noAnimation });
+  if (instant || noAnimation) return applyEnvironment();
+  loop.animate("weather", () => {
+    const moving = weather.step();
+    applyEnvironment();
+    return moving;
+  }, 30);
+}
+
+/* ---------- камера за курсором ---------- */
+
+function animateCamera() {
+  if (loop.has("camera")) return;
+  loop.animate("camera", (now, dt) => {
+    const moving = engine.rig.update(dt);
+    loop.invalidate("scene", "sky");
+    return moving;
   });
 }
-
-/** Насколько темнеет освещённая поверхность в тени — по каналам. */
-function shadowTone(n) {
-  const { L, amb, sun } = v.light;
-  const d = Math.max(0, n[0] * L[0] + n[1] * L[1] + n[2] * L[2]);
-  return amb.map((a, i) => a / (a + sun[i] * d + 1e-4));
-}
-
-/* ---------- тени ---------- */
-
-function groundShadows() {
-  const g = shadows.ground.begin(), L = v.light.L;
-  g.fillStyle = "#000";
-  for (const c of CASTERS) {
-    floorShadow(v, g, c, L, -.2, EDGE + .3, 80);
-    floorShadow(v, g, c, L, -.3, -90, FENCE - .2);
-  }
-  shadows.ground.apply(ctx, shadowTone([0, 1, 0]));
-}
-
-/** Тени на борту поезда: от табло, фонарей, ограды и деревьев слева — когда солнце со стороны платформы. */
-function trainShadows(zRear) {
-  const L = v.light.L;
-  if (L[0] > -.02) return;
-  const g = shadows.train.begin();
-  g.fillStyle = "#000";
-  for (const c of CASTERS) {
-    if (c[0][0] > SIDE_X) continue;
-    const flat = hull(c.map(p => { const q = toSide(p, L, SIDE_X); return [q[2], q[1]]; }));
-    if (flat.length < 3) continue;
-    g.beginPath();
-    if (v.path(g, flat.map(([z, y]) => [SIDE_X, y, z]))) g.fill();
-  }
-  // только там, где есть борт
-  g.globalCompositeOperation = "destination-in";
-  g.beginPath();
-  for (const q of sideQuads(zRear)) v.path(g, q);
-  g.fill();
-  shadows.train.apply(ctx, shadowTone([-1, 0, 0]));
-}
-
-function floorShadows(zRear) {
-  const g = shadows.floor.begin(), L = v.light.L;
-  g.fillStyle = "#000";
-  g.strokeStyle = "#000";
-  const list = trainPresent && L[0] > 0 ? [...CASTERS, ...trainCasters(zRear)] : CASTERS;
-  for (const c of list) floorShadow(v, g, c, L, PLATFORM_TOP, FENCE, EDGE + .04);
-  fenceShadow(v, g, L);
-  shadows.floor.apply(ctx, shadowTone([0, 1, 0]));
-}
-
-/* ---------- кадр сцены ---------- */
-
-function drawScene() {
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.lineJoin = "round";
-  const zRear = -D_END + trainOffset;
-  const sunUp = v.light.direct > .003 && v.light.L[1] > .005;
-
-  drawGround(v, ctx);
-  drawBridge(v, ctx);
-  drawTrees(v, ctx, "right");
-  drawTrees(v, ctx, "left");
-  drawTrack(v, ctx, TRACK2);
-  drawTrack(v, ctx, TRACK);
-  if (sunUp) groundShadows();
-  drawCatenary(v, ctx);
-  drawGantry(v, ctx);
-  if (trainPresent) {
-    drawTrain(v, ctx, zRear);
-    if (sunUp) trainShadows(zRear);
-  }
-  drawPlatform(v, ctx);
-  if (sunUp) floorShadows(zRear);
-  drawLampGlows(v, ctx);
-  if (trainPresent) drawWindowSpill(v, ctx, zRear);
-  drawFence(v, ctx);
-  drawLamps(v, ctx);
-  drawLampHeads(v, ctx);
-  drawBoardFrame(v, ctx);
-  placeBoard();
-}
-
-/* ---------- табло: HTML натягивается на экран табло в перспективе ---------- */
-
-const boardCorners = [[BOARD.x0 + .06, BOARD.y1 - .06], [BOARD.x1 - .06, BOARD.y1 - .06], [BOARD.x1 - .06, BOARD.y0 + .06], [BOARD.x0 + .06, BOARD.y0 + .06]]
-  .map(([x, y]) => [x, y, BOARD.z + .002]);
-const boardEl = $("board"), BOARD_H = Math.round(1200 * (BOARD.y1 - BOARD.y0 - .12) / (BOARD.x1 - BOARD.x0 - .12));
-boardEl.style.height = `${BOARD_H}px`;
-function placeBoard() {
-  const pts = boardCorners.map(p => v.screen(p));
-  if (pts.every(Boolean)) boardEl.style.transform = homography(1200, BOARD_H, ...pts);
-}
-
-/* ---------- поезд: прибытие из-за горизонта и отправление ---------- */
-
-const motion = new Motion((offset, present) => {
-  trainOffset = offset;
-  trainPresent = present;
-  dirty = true;
+addEventListener("pointermove", e => {
+  if (noAnimation) return;
+  engine.rig.setPointer(e.clientX / innerWidth * 2 - 1, e.clientY / innerHeight * 2 - 1);
+  animateCamera();
 });
-const state = { info: null, shown: null, list: [] };
-const showTrain = swapper({
-  motion,
-  instant: () => noAnimation || document.hidden,
-  firstInstant: true,
-  // уходит хвостом мимо нас; приходит электровозом из-за горизонта и тормозит у платформы
-  departDistance: () => D_END + 9,
-  departMs: 9000, departEase: easeInQuad,
-  arriveDistance: () => TRAIN_LENGTH + 260,
-  arriveMs: 21000, arriveEase: easeOutQuad,
-  pauseMs: 1800,
-  show(item) {
-    state.shown = item;
-    setPlate(item?.train || null);
-    updateBoard(Date.now(), item, state.list, state.info);
-    dirty = true;
-  },
+addEventListener("resize", () => {
+  engine.resize();
+  engine.rig.update(0);
+  loop.invalidate("scene", "sky");
 });
+// что-то загрузилось в фоне (модель вагона, текстура) — перерисовать сцену и тени
+addEventListener("trainpaper:invalidate", () => loop.invalidate("scene", "shadow"));
+// шрифт табличек и ливрей загрузился — перерисовать с ним
+document.fonts?.ready.then(() => setTimeout(() => loop.invalidate("scene"), 50));
 
-/* ---------- камера за курсором и цикл кадров ---------- */
+/* ---------- данные табло и время суток (общие с видом «Вагон») ---------- */
 
-let tx = 0, ty = 0, mx = 0, my = 0, drawnKey = "", started = false;
-addEventListener("pointermove", e => { tx = e.clientX / innerWidth * 2 - 1; ty = e.clientY / innerHeight * 2 - 1; });
-addEventListener("resize", layout);
-layout();
-
-(function frame() {
-  mx += (tx - mx) * .05;
-  my += (ty - my) * .05;
-  // лёгкий поворот головы и полшага в сторону: перспектива честная, небо двигается вместе со сценой
-  camera.position.set(mx * .09, EYE - my * .03, 0);
-  camera.rotation.set(-my * .013, -mx * .024, 0);
-  camera.updateMatrixWorld();
-  v.pos = [camera.position.x, camera.position.y, camera.position.z];
-  v.yaw = camera.rotation.y;
-  v.pitch = camera.rotation.x;
-  v.update();
-  if (env && celestial) {
-    const sunDir = sky.update(env, celestial, camera, VIEW_AZ, performance.now() / 1000);
-    computeLight(sunDir);
-    renderer.render(skyScene, camera);
-    // сцену перерисовываем, только когда что-то поменялось: камера, поезд или свет
-    const key = `${v.pos.map(c => c.toFixed(4))}|${v.yaw.toFixed(5)}|${v.pitch.toFixed(5)}|${trainOffset.toFixed(3)}|${trainPresent}|${lightKey}|${v.W}x${v.H}`;
-    if (dirty || key !== drawnKey) {
-      drawScene();
-      drawnKey = key;
-      dirty = false;
-    }
-    if (!started) { started = true; requestAnimationFrame(() => $("poster").classList.add("ready")); }
-  }
-  requestAnimationFrame(frame);
-})();
-
-startApp({
+app = startApp({
   name: "platform",
-  sky(e, c) {
-    env = e;
-    celestial = c;
-    lightKey = `${c.sun.altitude.toFixed(2)}|${c.sun.azimuth.toFixed(1)}|${e.lamps.toFixed(3)}`;
-    $("poster").style.setProperty("--lamps", e.lamps.toFixed(3));
+  uiExtras: [
+    { title: "Погода", key: "weather", options: WEATHER_LABELS },
+    { title: "Сцена", key: "scene", options: () => [["auto", "По станции"], ...SCENES.map(s => [s.id, s.name])] },
+    {
+      title: "Ракурс", key: "camera",
+      options: () => Object.keys(engine.rig.presets).map(k => [k, { main: "Основной", wide: "Общий", edge: "У края" }[k] || k]),
+      value: () => engine.rig.name,
+      select: name => { engine.rig.go(name, noAnimation ? 1 : 2400); animateCamera(); },
+    },
+  ],
+  sky(env, celestial) {
+    state.env = env;
+    state.celestial = celestial;
+    // свет и тени пересчитываем при заметном сдвиге солнца: в реальном времени — раз в ~20 с,
+    // при предпросмотре и «сутках за минуту» — каждый кадр
+    const s = celestial.sun, m = celestial.moon;
+    const key = `${s.altitude.toFixed(1)}|${s.azimuth.toFixed(1)}|${env.lamps.toFixed(2)}|${m ? m.altitude.toFixed(0) : ""}`;
+    if (key === state.lightKey) return;
+    state.lightKey = key;
+    applyEnvironment();
   },
   env() {},
   train(current, list, board, info, { changed, stationChanged }) {
     state.info = info;
     state.list = list;
-    if (changed || stationChanged || !state.shown) return showTrain(current);
-    state.shown = current;
-    setPlate(current?.train || null);
-    dirty = true;
+    if (stationChanged || !state.sceneDef) loadScene(sceneFor(info.id, settings().scene));
+    if (info.name) state.world?.setStation(info);
+    const first = state.current === undefined;
+    state.current = current;
+    if (changed || stationChanged || first) state.board?.show(current);
+    else state.board?.update(current);
+    updateBoard(Date.now(), state.shown ?? current, list, info);
   },
   tick(now) {
     updateBoard(now, state.shown, state.list, state.info);
   },
 });
+
+onChange((s, patch) => {
+  if ("weather" in patch) setWeather(s.weather);
+  if ("scene" in patch && state.info) loadScene(sceneFor(state.info.id, s.scene));
+});
+
+// сцена до прихода табло — по станции из настроек; поезд появится, когда придут данные
+loadScene(sceneFor(settings().station, settings().scene));
+setWeather(settings().weather, true);
+requestAnimationFrame(() => $("poster").classList.add("ready"));
+
+// для консоли разработчика: window.trainpaper.engine.rig.go("wide")
+window.trainpaper = { engine, state, weather, loadScene, SCENES };
+if (params.has("dev")) import("./dev.js").then(m => m.startDev({ engine, state, weather, loadScene }));

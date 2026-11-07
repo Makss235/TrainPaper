@@ -1,4 +1,9 @@
-// Светодиодное табло над платформой: HTML с точечной маской, натянутое на экран табло в 3D.
+// Светодиодное табло над платформой: HTML с точечной маской, натянутое на экран табло в 3D
+// (CSS matrix3d по четырём углам экрана). Текст остаётся настоящим текстом — чёткий при любом ракурсе.
+//
+// Бегущая строка движется шагами ровно в один светодиод (7 px), как на настоящем табло: буквы не
+// «плывут» по сетке точек (нет мерцания), а браузеру нужно перерисовывать табло ~12 раз в секунду,
+// а не каждый кадр, как при CSS-анимации.
 import { localTime } from "../lib/app.js";
 import { city, expand } from "../lib/names.js";
 import { countdown, delayInfo, headline, numberText, stopMinutes } from "../lib/trains.js";
@@ -14,15 +19,33 @@ function fitRow(node, max) {
   }
 }
 
-let tickerText = "";
+const LED = 7;                      // шаг светодиодов на табло (как в маске .led), px
+const STEP_MS = 85;                 // ≈ 80 px/с
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+let tickerText = "", tickerX = 0, tickerW = 0, tickerTimer = 0;
+
 function setTicker(text) {
   if (text === tickerText) return;
   tickerText = text;
   const node = $("bTicker");
   // две копии подряд: строка бежит без пустого начала и бесшовно повторяется
   node.replaceChildren(...[0, 1].map(() => Object.assign(document.createElement("span"), { textContent: `${text}   ●   ` })));
-  node.style.setProperty("--marquee", `${Math.max(16, text.length * .3)}s`);
+  tickerX = 0;
+  tickerW = 0;
+  node.style.transform = "translate3d(0,0,0)";
+  if (!tickerTimer) tickerTimer = setInterval(stepTicker, STEP_MS);
 }
+
+function stepTicker() {
+  if (document.hidden || reduceMotion.matches) return;
+  const node = $("bTicker");
+  if (!tickerW) tickerW = Math.round((node.firstChild?.offsetWidth || 0) / LED) * LED;
+  if (!tickerW) return;
+  tickerX -= LED;
+  if (-tickerX >= tickerW) tickerX += tickerW;
+  node.style.transform = `translate3d(${tickerX}px,0,0)`;
+}
+document.fonts?.ready.then(() => { tickerW = 0; });
 
 /** Текст табло: что за поезд у платформы, когда, какой путь, опоздание и бегущая строка. */
 export function updateBoard(now, item, list, info) {

@@ -18,24 +18,35 @@ const h = (tag, attrs = {}, ...children) => {
   return el;
 };
 
-function segmented(key, options) {
+/**
+ * Группа кнопок-переключателей. По умолчанию переключает настройку key;
+ * value() и select(v) — свой источник значения (например, ракурс камеры, который не сохраняется).
+ * options — [[значение, подпись], ...] или функция, возвращающая такой список (перечитывается в rebuild).
+ */
+function segmented(key, options, { value = () => settings()[key], select = v => update({ [key]: v }) } = {}) {
   const box = h("div", { class: "seg", role: "radiogroup" });
-  for (const [value, label] of options) {
-    box.append(h("button", {
-      type: "button", role: "radio", "data-value": value,
-      onclick: () => update({ [key]: value }),
-    }, label));
-  }
+  const rebuild = () => {
+    const list = typeof options === "function" ? options() : options;
+    box.replaceChildren(...list.map(([v, label]) => h("button", {
+      type: "button", role: "radio", "data-value": v,
+      onclick: () => { select(v); sync(); },
+    }, label)));
+    sync();
+  };
   const sync = () => box.querySelectorAll("button").forEach(b => {
-    const on = b.dataset.value === settings()[key];
+    const on = b.dataset.value === String(value());
     b.classList.toggle("on", on);
     b.setAttribute("aria-checked", on);
   });
-  sync();
-  return { box, sync };
+  rebuild();
+  return { box, sync, rebuild };
 }
 
-export function createUI(root, { view }) {
+/**
+ * extras — дополнительные группы панели (их добавляет вид, например «Платформа»: погода, сцена, ракурс):
+ *   [{ title, key, options, value?, select? }] — см. segmented().
+ */
+export function createUI(root, { view, extras = [] }) {
   const name = h("span", { class: "st-name" }, "…");
   const clock = h("span", { class: "st-clock" }, "--:--");
   const phase = h("span", { class: "st-phase" });
@@ -47,6 +58,7 @@ export function createUI(root, { view }) {
   const results = h("ul", { class: "results", role: "listbox" });
   const filter = segmented("filter", FILTER);
   const tod = segmented("tod", TOD);
+  const more = extras.map(x => ({ title: x.title, seg: segmented(x.key, x.options, x) }));
   const suburban = h("input", { type: "checkbox", onchange: e => update({ suburban: e.target.checked }) });
   const status = h("div", { class: "status" });
   const panel = h("div", { class: "panel", role: "dialog", "aria-label": "Настройки обоев", hidden: true },
@@ -54,6 +66,7 @@ export function createUI(root, { view }) {
     h("div", { class: "group" }, h("div", { class: "group-title" }, "Поезда"), filter.box,
       h("label", { class: "check" }, suburban, " пригородные поезда")),
     h("div", { class: "group" }, h("div", { class: "group-title" }, "Время суток"), tod.box),
+    more.map(x => h("div", { class: "group" }, h("div", { class: "group-title" }, x.title), x.seg.box)),
     h("div", { class: "group" }, h("div", { class: "group-title" }, "Вид"),
       h("div", { class: "seg" }, VIEWS.map(([key, label]) =>
         h("a", { href: `../${key}/${location.search}`, class: key === view ? "on" : null }, label)))),
@@ -94,6 +107,7 @@ export function createUI(root, { view }) {
     root.classList.add("open");
     suburban.checked = settings().suburban;
     filter.sync(); tod.sync();
+    more.forEach(x => x.seg.rebuild());
     input.value = "";
     runSearch();
     setTimeout(() => input.focus({ preventScroll: true }), 0);
@@ -108,7 +122,8 @@ export function createUI(root, { view }) {
   addEventListener("pointerdown", e => !root.contains(e.target) && close());
 
   return {
-    syncSettings() { filter.sync(); tod.sync(); suburban.checked = settings().suburban; },
+    syncSettings() { filter.sync(); tod.sync(); more.forEach(x => x.seg.sync()); suburban.checked = settings().suburban; },
+    refreshExtras() { more.forEach(x => x.seg.rebuild()); },
     setStation(text, id) { name.textContent = text; currentId = id; },
     setClock(text, phaseLabel, preview) {
       clock.textContent = text;
