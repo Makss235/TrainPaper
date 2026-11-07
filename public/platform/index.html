@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Платформа — TrainPaper</title>
+  <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500;1,600&display=swap">
+  <link rel="stylesheet" href="../assets/css/common.css">
+  <link rel="stylesheet" href="../assets/css/platform.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/suncalc@1.9.0/suncalc.js"></script>
+  <script type="module" src="../assets/js/platform/main.js"></script>
+</head>
+<body>
+<div id="poster">
+  <div id="sky"><div id="stars"></div><div id="sun"></div><div id="moon"></div></div>
+  <svg id="far" class="layer" preserveAspectRatio="xMinYMin slice" aria-hidden="true"></svg>
+  <svg id="train" class="layer" preserveAspectRatio="xMinYMin slice" aria-hidden="true"></svg>
+  <svg id="near" class="layer" preserveAspectRatio="xMinYMin slice" aria-hidden="true"></svg>
+  <div id="html" class="html-layer">
+    <div id="plateBox" class="plate-box" aria-hidden="true"><svg viewBox="0 0 1000 400" width="1000" height="400"><g id="plateG"></g></svg></div>
+    <div id="board" class="board" role="status" aria-live="polite">
+      <div class="screen">
+        <div class="led-glow">
+          <div class="led">
+            <div class="row top"><span id="bKind"></span><span id="bClock"></span></div>
+            <div class="row main"><span id="bNum"></span><span id="bRoute"></span></div>
+            <div class="row sub" id="bSub"><span id="bTime"></span><span id="bPlace"></span><span id="bDelay"></span></div>
+            <div class="row ticker"><div id="bTicker" class="marquee"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="grain"></div>
+  <div id="ui" class="ui"></div>
+</div>
+</body>
+</html>
