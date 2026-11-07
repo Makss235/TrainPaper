@@ -58,6 +58,6 @@
   .marquee { animation: none; }
 }
 
-/* 3D-сцена: холст WebGL под табло и интерфейсом; при загрузке плавно проявляется */
-#gl { position: absolute; inset: 0; display: block; width: 100%; height: 100%; opacity: 0; transition: opacity 1.4s ease; }
-#gl.ready { opacity: 1; }
+/* небо (WebGL) и сцена (canvas 2D) под табло и интерфейсом; при загрузке плавно проявляются */
+#gl, #scene { position: absolute; inset: 0; display: block; width: 100%; height: 100%; opacity: 0; transition: opacity 1.4s ease; }
+#poster.ready #gl, #poster.ready #scene { opacity: 1; }
