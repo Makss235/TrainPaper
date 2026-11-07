@@ -1,21 +1,28 @@
 // Вид «Вагон»: смотрим с платформы на хвост поезда сбоку. Хвостовой вагон с красной дверью,
 // в окне служебного купе — маршрутная табличка, слева — табличка станции и фонарь.
 import { localTime, startApp } from "../lib/app.js";
-import { bellowsShapes, CAR_L, coachShapes, PITCH } from "../lib/coach.js";
+import { bellowsShapes, BODY_BOTTOM_M, CAR_L, coachShapes, H_M, PITCH, ROOF, RZD_LOGO } from "../lib/coach.js";
 import { clamp } from "../lib/color.js";
 import { pathD, roundRect } from "../lib/geom.js";
 import { Motion, swapper } from "../lib/motion.js";
 import { city, expand, title, translit } from "../lib/names.js";
-import { applyPalette, injectMaterialStyles } from "../lib/palette.js";
+import { applyPalette, injectMaterialStyles, shadeFactor, sunStrength } from "../lib/palette.js";
 import { drawPlate, PLATE_W } from "../lib/plate.js";
 import { noAnimation } from "../lib/settings.js";
 import { initStars, renderSky } from "../lib/skyview.js";
+import { drawClouds, driftClouds, lightClouds } from "../lib/clouds.js";
+import { box, clipAxis, hull } from "../lib/shadow.js";
 import { countdown, delayInfo, eventWord, headline, numberText, stopMinutes } from "../lib/trains.js";
 
 const NS = "http://www.w3.org/2000/svg";
 const $ = id => document.getElementById(id);
 const poster = $("poster");
 const CARS = 4;
+const VIEW_AZ = 200;                 // небо рисуется так, будто смотрим на юго-юго-запад
+const RAD = Math.PI / 180;
+const SIGN_D = 1.55, LAMP_D = 1.9;   // на каком расстоянии от глаз стоят табличка и фонарь (м)
+const SIDE_D = 2.7;                  // борт вагона (на этой глубине строится масштаб вагона)
+const ROOF_TOP_M = BODY_BOTTOM_M + H_M * (1 + ROOF);
 
 injectMaterialStyles();
 initStars();
@@ -53,10 +60,10 @@ function layout() {
   const portrait = H > W * 1.05;
   const S = clamp(Math.min(H * .54, W * (portrait ? .62 : .5)), 140, 900);  // px на высоту боковины
   const horizon = H * (portrait ? .52 : .43);
-  const F = S / 2.2 * 2.7;                     // фокус: боковина вагона в 2,7 м от глаз
+  const F = S / H_M * 2.7;                     // фокус: боковина вагона в 2,7 м от глаз
   return {
     W, H, S, F, horizon, portrait,
-    yb: horizon + S / 2.2 * (2.75 - 1.3),      // низ кузова: 1,3 м над рельсом, глаза — 2,75 м
+    yb: horizon + S / H_M * (2.75 - BODY_BOTTOM_M),   // низ кузова над рельсом; глаза — в 2,75 м
     xe: W * (portrait ? .1 : .44),             // торец хвостового вагона
   };
 }
@@ -73,7 +80,9 @@ function drawFar() {
   const random = rng(11);
 
   // земля и балласт до самого низа (ближние части закроет платформа)
-  band(L.horizon - 1, H + 40, "f-ballast", el("g", { class: "hz3" }, svg));
+  const ground = el("linearGradient", { id: "gGround", x1: 0, y1: 0, x2: 0, y2: 1 }, el("defs", {}, svg));
+  for (const [o, level] of [[0, 4], [.35, 3], [1, 2]]) el("stop", { offset: o, style: `stop-color:var(--h${level}-ballast)` }, ground);
+  el("rect", { x: x0, y: L.horizon - 1, width: x1 - x0, height: H + 41 - L.horizon, fill: "url(#gGround)" }, svg);
 
   // город и деревья на горизонте
   const city = el("g", { class: "hz4" }, svg);
@@ -202,8 +211,12 @@ function drawTrain() {
         el("path", { d, fill: "url(#gInterior)" }, car);
         el("path", { d, fill: "url(#gReflect)", style: "opacity:calc(var(--reflect) * .9)" }, car);
         el("path", { d, class: "s-frame", fill: "none", "stroke-width": .02 * S }, car);
+      } else if (s.kind === "logo") {
+        // официальный логотип: путь в своих единицах, масштаб k на единицу высоты боковины
+        const wrap = s.clipTop ? el("g", { "clip-path": `url(#${clipFor(car, X, Y, s.clipTop)})` }, car) : car;
+        el("path", { d: RZD_LOGO, class: s.cls, transform: `translate(${X(s.u0).toFixed(2)} ${Y(s.v0).toFixed(2)}) scale(${(s.k * S).toFixed(4)})` }, wrap);
       } else if (s.kind === "text") {
-        el("text", { x: X(s.u), y: Y(s.v), class: "car-text", "font-size": s.size * S }, car, s.text);
+        el("text", { x: X(s.u), y: Y(s.v), class: s.cls ? `car-print ${s.cls}` : "car-text", "font-size": s.size * S }, car, s.text);
       } else if (s.kind === "tail") {
         el("circle", { cx: X(s.u), cy: Y(s.v), r: .3 * S, fill: "url(#gTail)", class: "glow",
           style: "opacity:calc(.1 + .9 * var(--lamps))" }, car);
@@ -221,6 +234,19 @@ function drawTrain() {
     }
   }
   spillSlot.replaceChildren(spillGroup);
+  // тень таблички и фонаря на борту: сама она стоит на месте, а кузов под ней может уехать
+  const top = Yd(SIDE_D, ROOF_TOP_M);
+  coachShadowClip = el("rect", { x: xe - .1 * S, y: top, width: L.W + 80, height: yb - top },
+    el("clipPath", { id: "coachClip" }, defs));
+  el("feGaussianBlur", { stdDeviation: Math.max(1, S * .005) }, el("filter", { id: "fPenumbraT", x: "-5%", y: "-5%", width: "110%", height: "110%" }, defs));
+  coachShadow = el("path", { class: "sun-shadow", filter: "url(#fPenumbraT)" }, el("g", { "clip-path": "url(#coachClip)" }, svg));
+}
+
+let clipSeq = 0;
+function clipFor(parent, X, Y, top) {
+  const id = `side${clipSeq++}`;
+  el("rect", { x: X(-.2), y: Y(top), width: X(CAR_L + .2) - X(-.2), height: Y(-1) - Y(top) }, el("clipPath", { id }, parent));
+  return id;
 }
 
 function drawWindow(parent, w, X, Y, S, id) {
@@ -251,6 +277,9 @@ function drawWindow(parent, w, X, Y, S, id) {
   }
   el("rect", { x: x0, y: yT, width: ww, height: hh, fill: "url(#gReflect)",
     style: `opacity:calc(var(--reflect) * ${w.plate ? .3 : .85})` }, g);
+  // глубина оконного проёма: тень от рамы сверху и слева внутри стекла
+  el("rect", { x: x0, y: yT, width: ww, height: hh * .1, class: "o-dark2" }, g);
+  el("rect", { x: x0, y: yT, width: ww * .035, height: hh, class: "o-dark1" }, g);
   el("path", {
     d: `M${x0 + ww * .12} ${yB}L${x0 + ww * .3} ${yB}L${x0 + ww * .72} ${yT}L${x0 + ww * .54} ${yT}Z` +
        `M${x0 + ww * .38} ${yB}L${x0 + ww * .45} ${yB}L${x0 + ww * .87} ${yT}L${x0 + ww * .8} ${yT}Z`,
@@ -259,11 +288,61 @@ function drawWindow(parent, w, X, Y, S, id) {
   el("path", { d: outline, class: "s-frame", fill: "none", "stroke-width": .022 * S }, parent);
   const yt = Y(w.transom);
   el("path", { d: `M${x0} ${yt}H${x1}`, class: "s-frame", "stroke-width": .014 * S }, parent);
+  el("rect", { x: x0 + w.r * S * .5, y: yB + .013 * S, width: ww - w.r * S, height: .012 * S, class: "o-light1" }, parent);   // отлив
 }
 
 /* ---------- ближний план: платформа, фонарь, табличка станции ---------- */
 
-let signParts = null, spillSlot = null;
+let signParts = null, spillSlot = null, floorShadow = null, signGeom = null, lampGeom = null;
+
+/* ---------- солнце: освещённость и тени ---------- */
+
+// Свет приходит со стороны зрителя — оттуда, где на небе солнце (слева или справа),
+// с высотой солнца над горизонтом. x — вправо, z — вверх, d — от глаз вглубь (к вагону).
+let light = null, coachShadow = null, coachShadowClip = null;
+
+function flatLight(sky) {
+  const rel = clamp(((sky.sun.azimuth - VIEW_AZ + 540) % 360) - 180, -75, 75) * RAD;
+  const alt = Math.max(0, sky.sun.altitude) * RAD;
+  return { x: Math.sin(rel) * Math.cos(alt), z: Math.sin(alt), d: -Math.cos(rel) * Math.cos(alt) };
+}
+
+const worldX = (x, d) => (x - L.W / 2) * d / L.F;                    // экранный x на глубине d → метры
+const worldZ = (y, d) => 2.75 - (y - L.horizon) * d / L.F;           // экранный y → высота над рельсом
+const screen = (X, d, z) => [L.W / 2 + X * L.F / d, Yd(d, z)];
+
+/** Тени таблички и фонаря: на пол платформы и на борт вагона, если луч дотягивается до него. */
+function updateShadows() {
+  if (!floorShadow) return;
+  const l = light;
+  if (!l || l.z < .02) {
+    floorShadow.setAttribute("d", "");
+    coachShadow?.setAttribute("d", "");
+    return;
+  }
+  const casters = [];
+  if (signGeom) {
+    const g = signGeom, D = SIGN_D, zTop = worldZ(g.sy, D), zBot = worldZ(g.sy + g.sh, D);
+    casters.push(box(worldX(g.sx, D), worldX(g.sx + g.sw, D), D - .03, D + .03, zBot, zTop));
+    for (const px of g.posts) casters.push(box(worldX(px, D), worldX(px + g.postW, D), D - .03, D + .03, 1.1, zBot + .05));
+  }
+  if (lampGeom) {
+    const g = lampGeom, D = LAMP_D, S = L.S;
+    casters.push(box(worldX(g.lx - g.pw / 2, D), worldX(g.lx + g.pw / 2, D), D - .04, D + .04, 1.1, worldZ(g.top, D)));
+    casters.push(box(worldX(g.lx + S * .05, D), worldX(g.lx + S * .21, D), D - .1, D + .1, worldZ(g.top - S * .03, D), worldZ(g.top - S * .075, D)));
+  }
+  let floor = "", side = "";
+  for (const c of casters) {
+    // на пол: (x, d) там, где луч упирается в платформу; дальше края платформы тень не ложится
+    const f = clipAxis(hull(c.map(([X, d, z]) => { const t = (z - 1.1) / l.z; return [X - l.x * t, d - l.d * t]; })), 1, .5, 2.5);
+    if (f.length > 2) floor += pathD(f.map(([X, d]) => screen(X, d, 1.1)));
+    // на борт вагона: (x, z) в плоскости борта, только в пределах кузова
+    const s = clipAxis(hull(c.map(([X, d, z]) => { const t = (SIDE_D - d) / -l.d; return [X - l.x * t, z - l.z * t]; })), 1, BODY_BOTTOM_M, ROOF_TOP_M);
+    if (s.length > 2) side += pathD(s.map(([X, z]) => screen(X, SIDE_D, z)));
+  }
+  floorShadow.setAttribute("d", floor);
+  coachShadow?.setAttribute("d", side);
+}
 
 function drawNear() {
   const svg = $("near");
@@ -296,11 +375,16 @@ function drawNear() {
   for (let x = x0; x < x1; x += S * .045) dots += `M${x.toFixed(1)} ${((Yd(2.11, 1.1) + Yd(1.96, 1.1)) / 2).toFixed(1)}h${(S * .02).toFixed(1)}`;
   el("path", { d: dots, class: "s-tile", "stroke-width": Math.max(1, (Yd(1.96, 1.1) - Yd(2.11, 1.1)) * .45) }, svg);
   spillSlot = el("g", {}, svg);
+  el("feGaussianBlur", { stdDeviation: Math.max(1, S * .004) }, el("filter", { id: "fPenumbra", x: "-5%", y: "-5%", width: "110%", height: "110%" }, defs));
+  floorShadow = el("path", { class: "sun-shadow", filter: "url(#fPenumbra)" }, svg);
 
   // фонарь между табличкой и хвостом поезда (в портретной раскладке ему нет места)
   const lx = L.xe - S * .17, top = L.H * .085, pw = Math.max(4, S * .026);
+  lampGeom = L.portrait ? null : { lx, top, pw };
   const lamp = el("g", { display: L.portrait ? "none" : null }, svg);
   el("rect", { x: lx - pw / 2, y: top, width: pw, height: H + 40 - top, class: "f-post" }, lamp);
+  el("rect", { x: lx, y: top, width: pw / 2, height: H + 40 - top, class: "o-dark2" }, lamp);
+  el("rect", { x: lx - pw * .35, y: top, width: pw * .18, height: H + 40 - top, class: "o-light1" }, lamp);
   el("rect", { x: lx - pw * .9, y: H - S * .25, width: pw * 1.8, height: S * .25 + 40, class: "f-post" }, lamp);
   el("path", { d: `M${lx} ${top + S * .02}q${S * .02} ${-S * .07} ${S * .1} ${-S * .07}`, class: "s-post", fill: "none", "stroke-width": pw * .55 }, lamp);
   el("rect", { x: lx + S * .05, y: top - S * .075, width: S * .16, height: S * .045, rx: S * .012, class: "f-lamp" }, lamp);
@@ -314,9 +398,14 @@ function drawNear() {
   const sign = el("g", {}, svg);
   // на стойках с платформы, а в портретной раскладке — подвешена сверху
   for (const px of [sx + sw * .1, sx + sw * .86]) {
-    el("rect", L.portrait ? { x: px, y: -40, width: sw * .02, height: sy + 40 + sh * .2, class: "f-post" }
-      : { x: px, y: sy + sh * .5, width: sw * .028, height: H + 40 - sy, class: "f-post" }, sign);
+    const post = L.portrait ? { x: px, y: -40, width: sw * .02, height: sy + 40 + sh * .2 }
+      : { x: px, y: sy + sh * .5, width: sw * .028, height: H + 40 - sy };
+    el("rect", { ...post, class: "f-post" }, sign);
+    el("rect", { ...post, x: px + post.width * .55, width: post.width * .45, class: "o-dark2" }, sign);      // круглая стойка
+    el("rect", { ...post, x: px + post.width * .12, width: post.width * .18, class: "o-light1" }, sign);
   }
+  el("rect", { x: sx + sh * .02, y: sy + sh * .97, width: sw - sh * .04, height: sh * .06, rx: sh * .02, class: "f-post" }, sign);   // толщина щита
+  signGeom = { sx, sy, sw, sh, posts: L.portrait ? [] : [sx + sw * .1, sx + sw * .86], postW: sw * .028 };
   el("rect", { x: sx, y: sy, width: sw, height: sh, rx: sh * .03, class: "f-sign" }, sign);
   el("rect", { x: sx + sw * .035, y: sy + sh * .8, width: sw * .93, height: sh * .035, class: "f-red" }, sign);
   signParts = {
@@ -399,18 +488,19 @@ function updateInfo(now) {
 /* ---------- движение и параллакс ---------- */
 
 const motion = new Motion((offset, present) => {
-  const dx = offset * L.S / 2.2;
+  const dx = offset * L.S / H_M;
   trainGroup?.setAttribute("transform", `translate(${dx.toFixed(1)} 0)`);
   spillGroup?.setAttribute("transform", `translate(${dx.toFixed(1)} 0)`);
   $("train").style.visibility = present ? "visible" : "hidden";
   if (spillGroup) spillGroup.style.visibility = present ? "visible" : "hidden";
+  coachShadowClip?.setAttribute("x", (L.xe - .1 * L.S + dx).toFixed(1));
 });
 
 const showTrain = swapper({
   motion,
   instant: () => noAnimation || document.hidden,
-  departDistance: () => (L.W - L.xe + 60) / (L.S / 2.2),
-  arriveDistance: () => (L.xe + 1.6 * PITCH * L.S) / (L.S / 2.2),
+  departDistance: () => (L.W - L.xe + 60) / (L.S / H_M),
+  arriveDistance: () => (L.xe + 1.6 * PITCH * L.S) / (L.S / H_M),
   show(item) {
     state.shown = item;
     $("info").classList.add("swap");
@@ -421,7 +511,8 @@ const showTrain = swapper({
   },
 });
 
-const layers = [[$("sky"), 3], [$("far"), 8], [$("train"), 16], [$("near"), 26]];
+let cloudField = null;
+const layers = [[$("sky"), 3], [$("clouds"), 4], [$("far"), 8], [$("train"), 16], [$("near"), 26]];
 let tx = 0, ty = 0, cx = 0, cy = 0;
 addEventListener("pointermove", e => { tx = e.clientX / innerWidth * 2 - 1; ty = e.clientY / innerHeight * 2 - 1; });
 (function parallax() {
@@ -429,6 +520,7 @@ addEventListener("pointermove", e => { tx = e.clientX / innerWidth * 2 - 1; ty =
   cx += (tx - cx) * .06;
   cy += (ty - cy) * .06;
   for (const [node, k] of layers) node.style.transform = `translate3d(${(-cx * k).toFixed(2)}px,${(-cy * k * .35).toFixed(2)}px,0)`;
+  driftClouds(cloudField);
   requestAnimationFrame(parallax);
 })();
 
@@ -437,22 +529,40 @@ addEventListener("pointermove", e => { tx = e.clientX / innerWidth * 2 - 1; ty =
 function build() {
   L = layout();
   farLamps = [];
-  for (const id of ["far", "train", "near"]) $(id).setAttribute("viewBox", `-40 -40 ${L.W + 80} ${L.H + 80}`);
+  for (const id of ["clouds", "far", "train", "near"]) $(id).setAttribute("viewBox", `-40 -40 ${L.W + 80} ${L.H + 80}`);
+  // облака не ставим под текст панели слева вверху (в портретной раскладке панель внизу)
+  const avoid = L.portrait ? [] : [{ x0: 0, y0: 0, x1: L.W * .03 + Math.min(L.W * .36, 560) + 30, y1: L.H * .5 }];
+  cloudField = drawClouds($("clouds"), { W: L.W, H: L.H, horizon: L.horizon, count: 8, seed: 5, avoid });
+  driftClouds(cloudField);
   drawFar();
   drawNear();
   drawTrain();
   updatePlate();
   updateSign();
+  updateShadows();
   motion.apply(motion.offset, motion.present);
+  app?.refreshSky();
 }
 
+let app = null;
 build();
 
-startApp({
+app = startApp({
   name: "flat",
+  sky(env, sky) {
+    const sun = renderSky(env, sky, { horizon: L.horizon, view: VIEW_AZ, fov: 140 });
+    lightClouds(cloudField, sun.sx, sun.sy);
+  },
   env(env, sky) {
-    applyPalette(poster, env);
-    renderSky(env, sky, { horizon: L.horizon, view: 200, fov: 140 });
+    light = flatLight(sky);
+    const sun = sunStrength(env.alt), toViewer = -light.d;
+    applyPalette(poster, env, {
+      side: shadeFactor(toViewer, sun),
+      roof: shadeFactor(.86 * light.z + .5 * toViewer, sun),
+      floor: shadeFactor(light.z, sun),
+      front: shadeFactor(toViewer, sun),
+    });
+    updateShadows();
   },
   train(current, list, board, info, { changed, stationChanged }) {
     state.info = info;

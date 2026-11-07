@@ -1,11 +1,17 @@
 // Движение поезда вдоль пути: offset в метрах, + — вперёд (к голове поезда).
 // Отправление — разгон, прибытие — торможение до полной остановки.
 
+export const easeInQuad = t => t * t;
+export const easeOutQuad = t => 1 - (1 - t) ** 2;
+export const easeInCubic = t => t * t * t;
+export const easeOutCubic = t => 1 - (1 - t) ** 3;
+
 export class Motion {
   constructor(apply) {
     this.apply = apply;              // apply(offset, present)
     this.offset = 0;
     this.present = false;
+    this.moving = false;
   }
 
   place(present = true) {
@@ -15,6 +21,7 @@ export class Motion {
   }
 
   animate(from, to, ms, ease) {
+    this.moving = true;
     return new Promise(resolve => {
       const t0 = performance.now();
       const step = now => {
@@ -22,38 +29,46 @@ export class Motion {
         this.offset = from + (to - from) * ease(t);
         this.apply(this.offset, true);
         if (t < 1) requestAnimationFrame(step);
-        else resolve();
+        else { this.moving = false; resolve(); }
       };
       requestAnimationFrame(step);
     });
   }
 
-  async depart(distance, ms = 5200) {
-    await this.animate(0, distance, ms, t => t * t * t);
+  async depart(distance, ms = 5200, ease = easeInCubic) {
+    await this.animate(0, distance, ms, ease);
     this.present = false;
     this.apply(distance, false);
   }
 
-  async arrive(distance, ms = 7000) {
+  async arrive(distance, ms = 7000, ease = easeOutCubic) {
     this.present = true;
-    await this.animate(-distance, 0, ms, t => 1 - (1 - t) ** 3);
+    await this.animate(-distance, 0, ms, ease);
   }
 }
 
-/** Очередь смен поезда: уходящий уезжает, затем подходит следующий. */
-export function swapper({ motion, departDistance, arriveDistance, show, instant }) {
-  let busy = false, pending;
+/**
+ * Очередь смен поезда: уходящий уезжает, затем подходит следующий.
+ * firstInstant — самый первый поезд просто стоит у платформы (без анимации при загрузке).
+ */
+export function swapper({ motion, departDistance, arriveDistance, show, instant,
+  departMs, arriveMs, departEase, arriveEase, pauseMs = 0, firstInstant = false }) {
+  let busy = false, pending, first = true;
   async function run() {
     if (busy) return;
     busy = true;
     while (pending !== undefined) {
       const next = pending;
       pending = undefined;
-      if (motion.present && !instant()) await motion.depart(departDistance());
+      // «первым» считается первый настоящий поезд: пока табло грузится, приходит пустое значение
+      const quick = instant() || (firstInstant && first);
+      if (motion.present && !quick) await motion.depart(departDistance(), departMs, departEase);
+      if (!quick && pauseMs && next) await new Promise(r => setTimeout(r, pauseMs));
       show(next);
       if (next) {
-        if (instant()) motion.place(true);
-        else await motion.arrive(arriveDistance());
+        if (quick) motion.place(true);
+        else await motion.arrive(arriveDistance(), arriveMs, arriveEase);
+        first = false;
       } else {
         motion.place(false);
       }

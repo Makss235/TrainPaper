@@ -83,6 +83,13 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_error(404)
         return None
 
+    def end_headers(self):
+        # статика: браузер всегда сверяется с сервером (304, если файл не менялся) — после
+        # обновления сайта не подхватываются старые модули из кэша
+        if not self.path.startswith("/api/"):
+            self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
 
 def make_server(host: str, port: int, service, public_dir: Path) -> ThreadingHTTPServer:
     handler = partial(Handler, service=service, public_dir=Path(public_dir).resolve())
