@@ -1,0 +1,9 @@
+// Ограда: модель (прутья узором, стойки и перила линиями) и тень решётки на пол (StripeShadow).
+// Длину меняйте у обоих компонентов: Model.params.length и StripeShadow.length.
+{
+  "name": "Ограда",
+  "components": [
+    { "type": "Model", "model": "station/fence", "params": { "length": 250, "height": 1.12 }, "castShadow": false, "surface": false },
+    { "type": "StripeShadow", "length": 250, "top": 1.12, "rails": [1.12, 0.12] }
+  ]
+}

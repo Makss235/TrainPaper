@@ -1,0 +1,46 @@
+// Стиль и качество по умолчанию. При создании движка их можно переопределить:
+//   new Engine({ style: { filters: { vignette: 0 } }, quality: { maxFps: 30 } })
+// Все цвета считаются в «экранном» пространстве (sRGB, как в CSS): дневной цвет материала
+// умножается на освещённость — плоский иллюстративный стиль.
+// @ts-check
+
+export const DEFAULT_QUALITY = {
+  pixelRatio: 1.5,          // предел devicePixelRatio (на 4K-экране обычно хватает 1)
+  msaa: 4,                  // сглаживание краёв сцены (0 — выключить)
+  skyScale: .5,             // разрешение неба относительно экрана
+  shadowSize: 2048,         // карта теней от солнца (4096 — чётче, но 64 МБ памяти)
+  maxFps: 60,               // потолок частоты кадров, пока что-то движется
+  skyFps: 12,               // как часто перерисовывать плывущие облака (0 — облака стоят)
+  precipFps: 40,            // частота кадров осадков
+  precipScale: 1,           // разрешение слоя осадков
+  powerPreference: "low-power",
+};
+
+export const DEFAULT_STYLE = {
+  light: {
+    sun: .74,                 // сила прямого солнца
+    ambient: { base: .16, twilight: .3, day: .34, night: .05 },
+    nightTint: [.55, .63, 1], // ночью рассеянный свет холодный
+    groundBounce: .78,        // насколько темнее рассеянный свет снизу
+    ceiling: .3,              // «мягкий потолок» пересвета
+    lampColor: [1, .82, .55], // тёплый свет фонарей
+  },
+  fog: { near: 90, far: 1600, max: .92 },
+  filters: {
+    exposure: 1, contrast: 1.03, saturation: 1.04, warmth: 0,
+    vignette: .24, vignetteColor: [6, 10, 26],
+    dither: 1,                // ±½ ступени: убирает полосы на градиентах, незаметен
+    grain: 0,                 // плёночное зерно (0 — нет)
+    posterize: 0,             // уровней на канал (0 — выкл.)
+  },
+};
+
+/** @param {any} a @param {any} b @returns {any} */
+export function mergeDeep(a, b) {
+  if (!b) return structuredClone(a);
+  const out = structuredClone(a);
+  for (const [k, v] of Object.entries(b)) {
+    out[k] = v && typeof v === "object" && !Array.isArray(v) && out[k] && typeof out[k] === "object" ? mergeDeep(out[k], v) : v;
+  }
+  return out;
+}

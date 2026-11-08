@@ -1,0 +1,65 @@
+// Заглушка типов three.js для подсказок в VS Code (jsconfig.json): имена есть, но всё — any.
+// Нужны полные типы — установите @types/three@0.160 и удалите этот файл.
+// Список имён собран из кода движка и моделей; новое имя THREE.* — добавьте строку сюда.
+declare module "three" {
+  export const AddEquation: any; export type AddEquation = any;
+  export const AxesHelper: any; export type AxesHelper = any;
+  export const BoxGeometry: any; export type BoxGeometry = any;
+  export const BoxHelper: any; export type BoxHelper = any;
+  export const BufferAttribute: any; export type BufferAttribute = any;
+  export const BufferGeometry: any; export type BufferGeometry = any;
+  export const CanvasTexture: any; export type CanvasTexture = any;
+  export const ClampToEdgeWrapping: any; export type ClampToEdgeWrapping = any;
+  export const ColorManagement: any; export type ColorManagement = any;
+  export const ConeGeometry: any; export type ConeGeometry = any;
+  export const CustomBlending: any; export type CustomBlending = any;
+  export const CylinderGeometry: any; export type CylinderGeometry = any;
+  export const DepthTexture: any; export type DepthTexture = any;
+  export const DoubleSide: any; export type DoubleSide = any;
+  export const Euler: any; export type Euler = any;
+  export const Float32BufferAttribute: any; export type Float32BufferAttribute = any;
+  export const FrontSide: any; export type FrontSide = any;
+  export const GridHelper: any; export type GridHelper = any;
+  export const Group: any; export type Group = any;
+  export const IcosahedronGeometry: any; export type IcosahedronGeometry = any;
+  export const InstancedBufferAttribute: any; export type InstancedBufferAttribute = any;
+  export const InstancedBufferGeometry: any; export type InstancedBufferGeometry = any;
+  export const InstancedMesh: any; export type InstancedMesh = any;
+  export const LessEqualCompare: any; export type LessEqualCompare = any;
+  export const LinearFilter: any; export type LinearFilter = any;
+  export const LinearSRGBColorSpace: any; export type LinearSRGBColorSpace = any;
+  export const Material: any; export type Material = any;
+  export const Matrix4: any; export type Matrix4 = any;
+  export const Mesh: any; export type Mesh = any;
+  export const MeshDepthMaterial: any; export type MeshDepthMaterial = any;
+  export const MeshStandardMaterial: any; export type MeshStandardMaterial = any;
+  export const NearestFilter: any; export type NearestFilter = any;
+  export const NoColorSpace: any; export type NoColorSpace = any;
+  export const Object3D: any; export type Object3D = any;
+  export const OneFactor: any; export type OneFactor = any;
+  export const OneMinusSrcAlphaFactor: any; export type OneMinusSrcAlphaFactor = any;
+  export const OrthographicCamera: any; export type OrthographicCamera = any;
+  export const Path: any; export type Path = any;
+  export const PerspectiveCamera: any; export type PerspectiveCamera = any;
+  export const PlaneGeometry: any; export type PlaneGeometry = any;
+  export const Quaternion: any; export type Quaternion = any;
+  export const RedFormat: any; export type RedFormat = any;
+  export const Scene: any; export type Scene = any;
+  export const ShaderMaterial: any; export type ShaderMaterial = any;
+  export const Shape: any; export type Shape = any;
+  export const ShapeGeometry: any; export type ShapeGeometry = any;
+  export const Side: any; export type Side = any;
+  export const Texture: any; export type Texture = any;
+  export const TextureLoader: any; export type TextureLoader = any;
+  export const UnsignedByteType: any; export type UnsignedByteType = any;
+  export const UnsignedIntType: any; export type UnsignedIntType = any;
+  export const Vector2: any; export type Vector2 = any;
+  export const Vector3: any; export type Vector3 = any;
+  export const Vector4: any; export type Vector4 = any;
+  export const WebGLRenderTarget: any; export type WebGLRenderTarget = any;
+  export const WebGLRenderer: any; export type WebGLRenderer = any;
+  export const ZeroFactor: any; export type ZeroFactor = any;
+}
+declare module "three/addons/*" {
+  export const GLTFLoader: any; export type GLTFLoader = any;
+}

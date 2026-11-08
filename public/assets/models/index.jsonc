@@ -1,0 +1,123 @@
+// Манифест моделей. Движок читает его перед загрузкой сцены.
+//
+// palette  — имена цветов: в моделях и сценах можно писать "platform" вместо "#c4c4bf".
+// aliases  — замены: имя модели → файл. Так включается другая модель без правки сцен.
+//            Детальные модели лежат в examples/ — раскомментируйте строку, чтобы включить:
+//            вместо примитива встанет модель с ливреей, окнами, контактной сетью по чертежу.
+// models   — данные для моделей glTF (у них нет JS-описания): meta для логики (длина вагона и т. п.).
+//
+// Модель по имени ищется: aliases → файл <имя>.js в этой папке. Имя с .glb/.gltf — модель из Blender.
+{
+  "palette": {
+    "body": "#d0d1d1",
+    "band2": "#c3c5c9",
+    "band": "#696b6d",
+    "rib": "#58595c",
+    "ribhi": "#7d7f81",
+    "gutter": "#8e9297",
+    "corr": "#b9bbbd",
+    "pin": "#9b2b31",
+    "darkend": "#61666a",
+    "darkdoor": "#575b5f",
+    "white": "#f4f4f4",
+    "print": "#55585c",
+    "red": "#e21a1a",
+    "doorline": "#3a2a2b",
+    "roof": "#4c4f53",
+    "roofhi": "#cdd0d3",
+    "roofbox": "#5f6266",
+    "grille": "#5b5f65",
+    "slat": "#8b8f94",
+    "pillar": "#74777a",
+    "handle": "#dcdddf",
+    "slot": "#41454a",
+    "lampbox": "#2e3135",
+    "green": "#2f9e57",
+    "redlamp": "#b8161c",
+    "taillens": "#ff3524",
+    "bellows": "#5d6166",
+    "fold": "#45494e",
+    "under": "#2b2d30",
+    "step": "#5a5e63",
+    "box": "#3a3d41",
+    "frame": "#33363a",
+    "text": "#ffffff",
+    "glass": "#7d8286",
+    "glasstop": "#55595d",
+    "platform": "#c4c4bf",
+    "tile": "#a8a9a3",
+    "coping": "#e0dfd8",
+    "yellow": "#efc12d",
+    "tactile": "#cbc6b3",
+    "gap": "#1b1c1e",
+    "post": "#3a3e43",
+    "sign": "#5b6067",
+    "signtext": "#ffffff",
+    "fence": "#2b2e32",
+    "lamp": "#4b4f54",
+    "ballast": "#8a8378",
+    "sleeper": "#8e8a82",
+    "rail": "#7d8287",
+    "railhi": "#c3c7cb",
+    "ground": "#86926f",
+    "mast": "#8d9196",
+    "wire": "#33373c",
+    "trees": "#4f6b58",
+    "trees2": "#6d8a75",
+    "city": "#9aa6b3",
+    "city2": "#adb7c2",
+    "farplat": "#a9aaa5",
+    "farroof": "#7c8590",
+    "ground2": "#7c8a68",
+    "city3": "#8f9ba8",
+    "hills": "#7d8b86",
+    "hills2": "#8f9c97",
+    "trunk": "#5b4636",
+    "tree1": "#4f7a4a",
+    "tree2": "#5d8650",
+    "tree3": "#557c58",
+    "tree4": "#678f55",
+    "tree5": "#4a6f4f",
+    "tileLine": "#a7a8a2",
+    "platformSide": "#9fa09b",
+    "railTop": "#c6cace",
+    "concrete": "#a9aaa6",
+    "concreteDark": "#8e8f8b",
+    "steel": "#7f858c",
+    "insulator": "#5c3d2e",
+    "mastBand": "#b04a3e",
+    "foundation": "#9e9e98",
+    "bridge": "#7c8590",
+    "canopy": "#5e646b",
+    "canopyUnder": "#8a9097",
+    "column": "#6c727a",
+    "wall": "#c9c2b3",
+    "wallDark": "#a59e90",
+    "roofDark": "#59606a",
+    "windowDark": "#46505b",
+    "trim": "#eceae4"
+
+  },
+
+  "aliases": {
+    // ---- детальные модели (examples/) — раскомментируйте, чтобы включить ----
+    // "trains/coach-fpk": "examples/trains/coach-fpk.js",
+    // "trains/coach-double": "examples/trains/coach-double.js",
+    // "trains/loco-ep": "examples/trains/loco-ep.js",
+    // "trains/loco-freight": "examples/trains/loco-freight.js",
+    // "trains/emu-head": "examples/trains/emu-head.js",
+    // "trains/emu-middle": "examples/trains/emu-middle.js",
+    // "trains/boxcar": "examples/trains/boxcar.js",
+    // "trains/tank": "examples/trains/tank.js",
+    // "trains/gondola": "examples/trains/gondola.js",
+    // "station/catenary": "examples/catenary.js",
+
+    // ---- своя модель из Blender вместо примитива ----
+    // "trains/coach-fpk": "my/coach-fpk.glb"
+  },
+
+  "models": {
+    // Пример для glTF: длина вагона и прочие данные, которые нужны логике поезда
+    // "my/coach-fpk.glb": { "meta": { "length": 25.5, "gap": 0.64, "gangway": { "half": 0.75, "y": [1.2, 3.85] } } }
+  }
+}

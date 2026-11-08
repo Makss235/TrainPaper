@@ -1,0 +1,11 @@
+// Фонарь на платформе: столб (модель), свет на пол и борт поезда ночью (Light), ореол (Glow).
+// В сцене: { "prefab": "lamp", "position": [-3.56, 1.1, -14], "repeat": { "count": 10, "step": [0, 0, -24] } }
+// Поменять что-то у одного экземпляра: { "prefab": "lamp", "components": [{ "type": "Light", "range": 15 }] }
+{
+  "name": "Фонарь",
+  "components": [
+    { "type": "Model", "model": "station/lamp-post", "params": { "height": 5.2, "arm": 0.9 } },
+    { "type": "Light", "range": 11, "intensity": 1.15, "offset": [1.0, 4.7, 0] },
+    { "type": "Glow", "radius": 1.7, "color": "#ffebbd", "offset": [1.0, 4.98, 0] }
+  ]
+}

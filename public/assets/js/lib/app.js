@@ -34,7 +34,8 @@ function cachedMarks(nowMs, lat, lon, offset) {
 /**
  * view: {
  *   name: "flat" | "platform",
- *   sky(env, sky, info)                — каждый кадр, пока небо меняется: солнце, луна, градиент, облака
+ *   sky(env, sky, info, moment)        — каждый кадр, пока небо меняется: солнце, луна, градиент, облака;
+ *                                        moment — показанный момент (мс), с учётом предпросмотра
  *   env(env, sky, info)                — освещение сцены (перекраска материалов, тени), не чаще ~15 раз в секунду
  *   train(current, list, board, info)  — сменился поезд у платформы (или табло обновилось)
  *   tick(now, current, list, info)     — раз в секунду: обратный отсчёт, часы
@@ -47,6 +48,9 @@ export function startApp(view) {
   const info = { id: null, name: "", rzdName: "", lat: 55.75, lon: 37.62, utcOffset: 180, demo: false, stale: false };
   let board = null, currentKey = undefined, pollTimer = 0, loadId = 0;
   let cycleStart = performance.now(), cycleBase = Date.now();
+  // на сколько целых суток небо ушло от настоящего («сутки за минуту» прокручивает дни вперёд):
+  // рассвет/день/закат/ночь берутся в тех сутках, что сейчас на небе, а не отматываются к сегодняшним
+  let dayShift = 0;
   let shown = null, transition = null, lastLight = null, lastSkyKey = "", lastClock = "";
 
   async function applyStation(id) {
@@ -112,7 +116,7 @@ export function startApp(view) {
     const mode = settings().tod;
     if (mode === "auto") return nowMs;
     if (mode === "cycle") return cycleBase + (performance.now() - cycleStart) * CYCLE_SPEED;
-    const m = cachedMarks(nowMs, info.lat, info.lon, info.utcOffset);
+    const m = cachedMarks(nowMs + dayShift, info.lat, info.lon, info.utcOffset);
     const t = { dawn: m.sunrise + 12 * 60000, day: m.noon, dusk: m.sunset - 12 * 60000, night: m.midnight }[mode];
     if (shown == null) return t;
     // из t−сутки, t, t+сутки берём ближайший к тому, что сейчас на небе: переход идёт коротким путём
@@ -150,7 +154,7 @@ export function startApp(view) {
     const skyKey = `${sky.sun.altitude.toFixed(3)}|${sky.sun.azimuth.toFixed(3)}|${sky.moon ? sky.moon.azimuth.toFixed(2) : ""}`;
     if (force || skyKey !== lastSkyKey) {
       lastSkyKey = skyKey;
-      view.sky(env, sky, info);
+      view.sky(env, sky, info, shown);
     }
     // перекраска сцены тяжелее неба: только при заметном сдвиге солнца и не чаще ~15 раз в секунду
     const t = performance.now(), l = lastLight;
@@ -169,6 +173,10 @@ export function startApp(view) {
     if ("tod" in patch) {
       cycleStart = performance.now();
       cycleBase = shown ?? Date.now();               // «сутки за минуту» продолжают с того, что уже на небе
+      dayShift = shown == null ? 0 : Math.round((shown - Date.now()) / DAY_MS) * DAY_MS;
+      // «Авто» — это настоящее «сейчас»: прокрученные сутки сбрасываются целиком (солнце стоит там же),
+      // а переход идёт только по времени суток, не назад через все дни
+      if (s.tod === "auto" && shown != null) { shown -= dayShift; dayShift = 0; }
       if (s.tod !== "cycle") startTransition();
     }
   });

@@ -13,6 +13,7 @@ MIME_TYPES = {
     ".css": "text/css; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
     ".json": "application/json; charset=utf-8",
+    ".jsonc": "application/json; charset=utf-8",   # сцены и префабы (JSON с комментариями)
     ".svg": "image/svg+xml",
     ".png": "image/png",
     ".jpg": "image/jpeg",

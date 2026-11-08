@@ -1,0 +1,71 @@
+// Санкт-Петербург-Главный (Московский вокзал) — тупиковый вокзал. Блокаут: островные платформы под
+// длинными навесами, пять путей, порталы контактной сети, плотная застройка у горизонта.
+// Камера у начала платформы (здание вокзала и упоры — за спиной) смотрит наружу, на юго-восток.
+// На тупиковом вокзале поезд приходит локомотивом вперёд — к упорам за спиной — и стоит хвостом
+// к выходу; отправляющийся стоит локомотивом к горизонту и уходит туда же (departure.heading = −1).
+// Станция конечная: платформы 330 м, навесы ~200 м; пути и сеть уходят к горизонту.
+// Свою модель вокзала поставьте объектом { "components": [{ "type": "Model", "model": "spb/station.glb" }] }.
+{
+  "name": "Санкт-Петербург-Главный",
+  "environment": {
+    "azimuth": 135,
+    "weather": "partly",
+    "shadows": { "x": [-16, 22], "y": [-1, 12], "z": [16, -120] }
+  },
+  "objects": [
+    // ---------- камеры ----------
+    { "name": "Основной", "position": [0, 2.75, 0], "rotation": [1, 0, 0],
+      "components": [{ "type": "Camera", "main": true, "label": "Основной", "focal": [0.58, 1.0], "center": [0.42, 0.45] }, { "type": "CameraParallax" }] },
+    { "name": "Общий", "position": [-1.2, 3.3, 10],
+      "components": [{ "type": "Camera", "label": "Общий", "target": [3.4, 3.2, -60], "focal": [0.48, 0.82], "center": [0.46, 0.47] }, { "type": "CameraParallax" }] },
+
+    // ---------- дальний план ----------
+    { "name": "Земля", "position": [0, -0.32, 0], "components": [{ "type": "Model", "model": "environment/ground", "params": { "color": "ground2" }, "castShadow": false }] },
+    { "name": "Город", "components": [{ "type": "Model", "model": "environment/skyline",
+      "params": { "seed": 21, "count": 260, "x": [-1400, 1400], "z": [-600, -1500], "height": [16, 70], "width": [24, 90], "gap": 40 }, "castShadow": false }] },
+    { "name": "Деревья", "position": [-28, -0.32, -120], "repeat": { "count": 34, "step": [0, 0, -14], "jitter": [3, 0, 3], "scaleJitter": 0.2, "seed": 5 },
+      "components": [{ "type": "Model", "model": "environment/tree", "params": { "color": "tree2" } }] },
+    { "name": "Путепровод", "position": [8, 0, -230], "components": [{ "type": "Model", "model": "station/footbridge", "params": { "span": 140, "height": 7.6, "piers": [-22, 3, 23] } }] },
+    { "name": "Депо", "position": [-41, -0.3, -295], "components": [{ "type": "Model", "model": "station/building",
+      "params": { "size": [38, 16, 70], "color": "wallDark", "gable": 4, "windows": { "rows": 3, "step": 4.4, "bottom": 2.4, "width": 2.2, "height": 2.6, "gap": 3.2 } } }] },
+    { "name": "Корпус", "position": [57, -0.3, -340], "rotation": [0, 180, 0], "components": [{ "type": "Model", "model": "station/building",
+      "params": { "size": [46, 22, 80], "windows": { "rows": 4, "step": 4.6, "bottom": 2.8, "width": 1.8, "height": 2.4, "gap": 3.6 } } }] },
+
+    // ---------- пути ----------
+    { "name": "Путь 0", "position": [-9.2, 0, 0], "components": [{ "type": "Model", "model": "station/track", "params": { "back": 30 } }, { "type": "RailTrack", "platform": { "top": 1.1, "edge": -6.9 } }] },
+    { "name": "Путь 1", "position": [4.42, 0, 0], "components": [{ "type": "Model", "model": "station/track", "params": { "back": 30 } }, { "type": "RailTrack", "platform": { "top": 1.1, "edge": 2.5 } }] },
+    { "name": "Путь 2", "position": [9.8, 0, 0], "components": [{ "type": "Model", "model": "station/track", "params": { "back": 30 } }, { "type": "RailTrack", "platform": { "top": 1.1, "edge": 11.72 } }] },
+    { "name": "Путь 3", "position": [21.92, 0, 0], "components": [{ "type": "Model", "model": "station/track", "params": { "back": 30 } }, { "type": "RailTrack", "platform": { "top": 1.1, "edge": 20 } }] },
+    { "name": "Путь 4", "position": [27.2, 0, 0], "components": [{ "type": "Model", "model": "station/track", "params": { "back": 30 } }, { "type": "RailTrack" }] },
+
+    // ---------- контактная сеть на порталах ----------
+    { "name": "Портал", "position": [9.3, 0, -24], "repeat": { "count": 8, "step": [0, 0, -60] },
+      "components": [{ "type": "Model", "model": "station/gantry", "params": { "width": 42.6, "height": 9.4 } }] },
+    { "name": "Провода", "position": [0, 0, -24],
+      "components": [{ "type": "Model", "model": "station/catenary", "params": { "masts": false, "tracks": [-9.2, 4.42, 9.8, 21.92, 27.2], "count": 14, "back": 54 } }] },
+
+    // ---------- наша островная платформа с навесом ----------
+    { "name": "Платформа 1", "position": [-2.2, 0, 30],
+      "components": [{ "type": "Model", "model": "station/platform", "params": { "length": 330, "width": 9.4, "edges": ["-x", "+x"] }, "castShadow": false }] },
+    { "name": "Навес 1", "position": [-2.2, 1.1, 28],
+      "components": [{ "type": "Model", "model": "station/canopy", "params": { "width": 8.4, "length": 203, "height": 4.4, "columns": [0] } }] },
+    { "name": "Светильник навеса 1", "prefab": "canopy-lamp", "position": [-2.2, 5.5, 21], "repeat": { "count": 19, "step": [0, 0, -10.5] } },
+    { "name": "Табло", "prefab": "departure-board", "position": [0.5, 1.1, -9.5] },
+
+    // ---------- соседняя островная платформа ----------
+    { "name": "Платформа 2", "position": [15.86, 0, 30],
+      "components": [{ "type": "Model", "model": "station/platform", "params": { "length": 330, "width": 8.28, "edges": ["-x", "+x"] }, "castShadow": false }] },
+    { "name": "Навес 2", "position": [15.86, 1.1, 28],
+      "components": [{ "type": "Model", "model": "station/canopy", "params": { "width": 7.3, "length": 190, "height": 4.4, "columns": [0] } }] },
+    { "name": "Светильник навеса 2", "prefab": "canopy-lamp", "position": [15.86, 5.5, 21], "repeat": { "count": 18, "step": [0, 0, -10.5] } },
+
+    // ---------- движение ----------
+    { "name": "Движение", "components": [
+      { "type": "TrainTraffic", "role": "board", "track": "Путь 1",
+        "arrival": { "heading": 1, "stop": { "far": -7.2 }, "from": 300, "ms": 22000 },
+        "departure": { "heading": -1, "stop": { "near": 26 }, "to": 700, "ms": 11000 },
+        "pause": 2400 }
+      // , { "type": "TrainTraffic", "role": "passing", "track": "Путь 4", "train": "emu-fast", "heading": -1, "speed": 9, "every": [300, 900], "first": 60 }
+    ] }
+  ]
+}

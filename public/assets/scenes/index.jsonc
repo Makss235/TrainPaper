@@ -1,0 +1,18 @@
+// Сцены станций и какая сцена у какой станции.
+//
+// scenes   — все сцены: id (для ?scene=id и панели), name (подпись), file (файл в этой папке).
+// stations — ID станции РЖД (внутренний ID табло, см. assets/data/stations.json) → id сцены.
+// default  — сцена для станций без своей.
+// Новая сцена: скопируйте _template.jsonc, добавьте строку в scenes и, если нужно, станцию в stations.
+{
+  "scenes": [
+    { "id": "typical", "name": "Типовая платформа", "file": "typical.jsonc" },
+    { "id": "spb-glavny", "name": "Санкт-Петербург-Главный", "file": "spb-glavny.jsonc" },
+    { "id": "murmansk", "name": "Мурманск", "file": "murmansk.jsonc" }
+  ],
+  "stations": {
+    "428": "spb-glavny",
+    "197": "murmansk"
+  },
+  "default": "typical"
+}

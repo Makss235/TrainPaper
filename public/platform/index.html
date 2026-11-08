@@ -10,7 +10,8 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500;1,600&display=swap">
   <link rel="stylesheet" href="../assets/css/common.css">
   <link rel="stylesheet" href="../assets/css/platform.css">
-  <!-- three.js лежит в проекте; загрузчик моделей glTF подгружается, только если в сцене есть модель -->
+  <!-- three.js лежит в проекте; движок — public/engine/ (подключает "three" через эту карту);
+       загрузчик моделей glTF подгружается, только если в сцене есть модель .glb/.gltf -->
   <script type="importmap">{ "imports": {
     "three": "../assets/vendor/three/three.module.min.js",
     "three/addons/": "../assets/vendor/three/addons/"
@@ -19,7 +20,7 @@
   <script type="module" src="../assets/js/platform/main.js"></script>
 </head>
 <body>
-<!-- холст WebGL вставляет main.js первым ребёнком #poster; виньетка и дизеринг — в шейдере сборки кадра -->
+<!-- холст WebGL движок вставляет первым ребёнком #poster; #board — живой текст табло (компонент HtmlScreen) -->
 <div id="poster">
   <div id="html" class="html-layer">
     <div id="board" class="board" role="status" aria-live="polite">

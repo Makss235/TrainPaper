@@ -1,0 +1,10 @@
+// Светильник под навесом: корпус (примитив, ночью светится), свет на пол (Light), ореол (Glow).
+// Начало координат — низ крыши навеса.
+{
+  "name": "Светильник навеса",
+  "components": [
+    { "type": "Primitive", "size": [1.0, 0.1, 0.2], "offset": [0, -0.07, 0], "color": "lamp", "material": { "emissiveNight": [1, 0.9, 0.72] } },
+    { "type": "Light", "range": 8, "intensity": 0.8, "offset": [0, -0.4, 0] },
+    { "type": "Glow", "radius": 1.1, "intensity": 0.55, "color": "#ffe6b8", "offset": [0, -0.14, 0] }
+  ]
+}

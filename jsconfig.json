@@ -1,0 +1,18 @@
+{
+  // Подсказки и проверка типов в VS Code для кода без сборки (JS + JSDoc).
+  // Проверяются файлы с // @ts-check в начале; остальные только подсказывают.
+  // three.js подключается через importmap, поэтому его типы — заглушка types/three.d.ts (имена есть, всё any).
+  // Полные типы: npm i -D @types/three@0.160 и удалите types/three.d.ts.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "checkJs": false,
+    "allowJs": true,
+    "noEmit": true,
+    "strict": false,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["public/engine/**/*.js", "public/assets/**/*.js", "types/**/*.d.ts"],
+  "exclude": ["public/assets/vendor/**", "server/**"]
+}

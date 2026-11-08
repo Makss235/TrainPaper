@@ -1,0 +1,12 @@
+// Светодиодное табло на раме: рама (модель), живой текст (HtmlScreen — элемент #board страницы
+// натягивается на экран), табло поездов (DepartureBoard — текст из данных РЖД), подсветка пола ночью.
+// Начало координат — пол под серединой табло; экран смотрит в +z (к камере по умолчанию).
+{
+  "name": "Табло",
+  "components": [
+    { "type": "Model", "model": "station/board-frame", "params": { "width": 2.8, "height": 0.98, "bottom": 2.27 } },
+    { "type": "HtmlScreen", "element": "#board", "size": [2.68, 0.86], "offset": [0, 2.76, 0.002] },
+    { "type": "DepartureBoard" },
+    { "type": "Light", "range": 4.5, "intensity": 0.35, "color": [1, 0.78, 0.4], "offset": [0, 1.9, 1.2] }
+  ]
+}
