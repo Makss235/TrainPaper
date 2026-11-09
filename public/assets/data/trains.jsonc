@@ -1,6 +1,6 @@
 // Составы и правила выбора состава для поезда с табло РЖД.
 //
-// types — составы: consist — модели вагонов от ГОЛОВЫ к хвосту (имена моделей из assets/models/).
+// types — составы: consist — вагоны от ГОЛОВЫ к хвосту: имена моделей из assets/models/ или префабов "cars/…".
 //   "trains/emu-head:flip"                          — вагон развёрнут
 //   { "model": "trains/coach-fpk", "repeat": 6 }    — несколько одинаковых подряд
 //   { "random": ["trains/boxcar", "trains/tank"], "count": [18, 32], "groups": 0.22 }
@@ -8,7 +8,7 @@
 // rules — какой состав показать: первое подходящее правило. Поля правила (кроме use и note) — регулярные
 //   выражения по полям поезда из табло: number ("119А"), from, to, type (long | suburban | other), kind
 //   (arrival | departure | transit). default — если ни одно не подошло.
-// Сцена может добавить свои правила: компонент TrainTraffic, свойство rules.
+// Сцена может добавить свои правила: компонент RzdBoard, свойство rules.
 {
   "types": {
     "fpk-long": {

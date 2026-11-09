@@ -2,13 +2,13 @@
 //   1. небо (буфер пониженного разрешения) + звёзды и луна в полном разрешении, спрятанные за облаками;
 //   2. поверх — сцена (её буфер с прозрачностью там, где видно небо);
 //   3. осадки — слой частиц в мире (environment/precipitation.js), уже проверенный по глубине сцены;
-//   4. фильтры из style.filters: экспозиция, контраст, насыщенность, тёплый/холодный тон,
-//      виньетка, постеризация, дизеринг (убирает полосы на градиентах) и, если включено, зерно.
-// Новый фильтр добавляется функцией в GLSL ниже и параметром в style.filters (render/style.js).
-// @ts-nocheck
+//   4. эффекты пост-обработки из стека engine.post (render/post.js): по умолчанию grade, vignette, posterize,
+//      grain, dither (бывшие style.filters); по желанию — bloom, outline, lut и свои эффекты.
+// Шейдер пересобирается только при смене набора эффектов; параметры — uniforms.
+// @ts-check
 import * as THREE from "three";
 
-const FRAGMENT = /* glsl */`
+const BASE = /* glsl */`
   uniform sampler2D tSky;
   uniform sampler2D tScene;
   uniform sampler2D tFx;
@@ -24,10 +24,6 @@ const FRAGMENT = /* glsl */`
   uniform float uMoon;           // видимость луны 0…1
   uniform vec3 uMoonColor;
   uniform vec3 uSkyTop;
-  // фильтры
-  uniform vec4 uGrade;           // экспозиция, контраст, насыщенность, теплота
-  uniform vec4 uFx;              // виньетка, дизеринг, зерно, постеризация
-  uniform vec3 uVignetteColor;
   varying vec2 vUv;
 
   float hash12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
@@ -70,9 +66,11 @@ const FRAGMENT = /* glsl */`
     vec3 col = uMoonColor * (.07 + .93 * lit);
     return col * edge;
   }
+`;
 
+/** Основная часть main(): небо, звёзды и луна, сцена, осадки → col. */
+const MAIN = /* glsl */`
   void main(){
-    vec2 frag = gl_FragCoord.xy;
     vec4 sky = texture2D(tSky, vUv);
     vec3 col = sky.rgb;
     vec3 d = rayDir(vUv);
@@ -90,31 +88,17 @@ const FRAGMENT = /* glsl */`
       vec4 fx = texture2D(tFx, vUv);
       col = col * (1.0 - fx.a) + fx.rgb;
     }
-
-    // цветокоррекция
-    col *= uGrade.x;
-    col = (col - .5) * uGrade.y + .5;
-    float lum = dot(col, vec3(.299, .587, .114));
-    col = mix(vec3(lum), col, uGrade.z);
-    col *= vec3(1.0 + uGrade.w * .06, 1.0, 1.0 - uGrade.w * .06);
-    // виньетка — как прежняя CSS-виньетка: эллипс, прозрачный в середине, тёмный к краям
-    vec2 e = (vUv - vec2(.5, .54)) / vec2(.78, .72);
-    float v = smoothstep(.58, 1.0, length(e) * 1.0);
-    col = mix(col, uVignetteColor, v * uFx.x);
-    if (uFx.w > 1.0) col = floor(col * uFx.w + .5) / uFx.w;
-    // дизеринг: ±½ ступени 8 бит — плавные градиенты неба без полос; зерно — по желанию
-    float n = hash12(frag) + hash12(frag + 17.31) - 1.0;
-    col += n * (uFx.y / 255.0 + uFx.z * .08);
-    gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
-  }
 `;
 
+/** @param {any} v */
+const isUniform = v => v && typeof v === "object" && !Array.isArray(v) && "value" in v && !v.isTexture;
+
 export class Composite {
-  /** @param {any} style стиль движка (filters) */
+  /** @param {any} style стиль движка */
   constructor(style) {
     this.style = style;
-    const F = style.filters;
-    this.uniforms = {
+    /** @type {Record<string, {value: any}>} */
+    this.base = {
       tSky: { value: null }, tScene: { value: null },
       uRes: { value: new THREE.Vector2(1, 1) },
       uInvProj: { value: new THREE.Matrix4() }, uCamRot: { value: new THREE.Matrix4() },
@@ -122,16 +106,13 @@ export class Composite {
       uStars: { value: 0 }, uMoonDir: { value: new THREE.Vector3(0, 1, 0) }, uSunDir: { value: new THREE.Vector3(0, 1, 0) },
       uMoon: { value: 0 }, uMoonColor: { value: new THREE.Vector3(.93, .95, .98) }, uSkyTop: { value: new THREE.Vector3() },
       tFx: { value: null }, uFxOn: { value: 0 },
-      uGrade: { value: new THREE.Vector4(F.exposure, F.contrast, F.saturation, F.warmth) },
-      uFx: { value: new THREE.Vector4(F.vignette, F.dither, F.grain, F.posterize) },
-      uVignetteColor: { value: new THREE.Vector3(...F.vignetteColor.map(c => c / 255)) },
     };
-    this.material = new THREE.ShaderMaterial({
-      uniforms: this.uniforms,
-      vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }",
-      fragmentShader: FRAGMENT,
-      depthTest: false, depthWrite: false,
-    });
+    /** Все uniforms сборки (основные + эффектов) */
+    this.uniforms = { ...this.base };
+    /** @type {import("./post.js").PostStack | null} */
+    this.stack = null;
+    this.version = -1;
+    this.material = this.#material([]);
     this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.material);
     this.quad.frustumCulled = false;
     this.scene = new THREE.Scene();
@@ -139,15 +120,69 @@ export class Composite {
     this.ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   }
 
-  /** Перечитать style.filters (например, после правки в инструменте разработчика). */
-  syncStyle() {
-    const F = this.style.filters;
-    this.uniforms.uGrade.value.set(F.exposure, F.contrast, F.saturation, F.warmth);
-    this.uniforms.uFx.value.set(F.vignette, F.dither, F.grain, F.posterize);
-    this.uniforms.uVignetteColor.value.set(...F.vignetteColor.map(c => c / 255));
+  /** Стек эффектов (engine.post). @param {import("./post.js").PostStack} stack */
+  setStack(stack) { this.stack = stack; this.version = -1; }
+
+  /** Шейдер под набор эффектов. @param {import("./post.js").PostEffect[]} effects */
+  #material(effects) {
+    const glsl = effects.map(e => (/** @type {any} */ (e.constructor)).glsl).join("\n");
+    const apply = effects.map(e => `    col = ${e.type}(col, vUv);`).join("\n");
+    return new THREE.ShaderMaterial({
+      uniforms: this.uniforms,
+      vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }",
+      fragmentShader: `${BASE}\n${glsl}\n${MAIN}\n${apply}\n    gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);\n  }\n`,
+      depthTest: false, depthWrite: false,
+    });
   }
 
+  /** Набор эффектов поменялся — пересобрать шейдер. */
+  #rebuild() {
+    const stack = /** @type {import("./post.js").PostStack} */ (this.stack);
+    const effects = stack.list().filter(e => e.enabled);
+    this.uniforms = { ...this.base };
+    for (const fx of effects) this.#fill(fx);
+    this.material.dispose();
+    this.material = this.#material(effects);
+    this.quad.material = this.material;
+    this.version = stack.version;
+    this.effects = effects;
+  }
+
+  /** @param {import("./post.js").PostEffect} fx */
+  #fill(fx) {
+    for (const [name, v] of Object.entries(fx.uniforms(fx.props))) {
+      if (isUniform(v)) { this.uniforms[name] = v; continue; }        // общий uniform (например, uLamps движка)
+      const u = (this.uniforms[name] ||= { value: null });
+      u.value = Array.isArray(v) ? vec(v, u.value) : v;
+    }
+  }
+
+  /** Обновить uniforms эффекта (свойства поменялись) — без пересборки шейдера. @param {import("./post.js").PostEffect} fx */
+  syncEffect(fx) {
+    if (this.version !== this.stack?.version) return;               // пересоберётся в ближайшем кадре
+    this.#fill(fx);
+  }
+
+  /** Перечитать style.filters (инструмент разработчика, прежний формат стиля). */
+  syncStyle() {
+    const F = this.style.filters, P = this.stack;
+    if (!P) return;
+    P.set("grade", { exposure: F.exposure, contrast: F.contrast, saturation: F.saturation, warmth: F.warmth });
+    P.set("vignette", { amount: F.vignette, color: F.vignetteColor });
+    P.set("posterize", { levels: F.posterize });
+    P.set("grain", { amount: F.grain });
+    P.set("dither", { amount: F.dither });
+  }
+
+  /**
+   * @param {THREE.WebGLRenderer} renderer
+   * @param {THREE.Texture} sky @param {THREE.Texture} scene @param {THREE.Texture | null} fx
+   * @param {THREE.PerspectiveCamera} camera @param {number} width @param {number} height
+   */
   render(renderer, sky, scene, fx, camera, width, height) {
+    if (this.stack && this.version !== this.stack.version) this.#rebuild();
+    // анимированные эффекты (зерно) — новое значение на каждый кадр сборки
+    for (const e of this.effects || []) if ((/** @type {any} */ (e.constructor)).fps) this.#fill(e);
     const U = this.uniforms;
     U.tSky.value = sky;
     U.tScene.value = scene;
@@ -159,4 +194,12 @@ export class Composite {
     renderer.setRenderTarget(null);
     renderer.render(this.scene, this.ortho);
   }
+}
+
+/** Массив → THREE.Vector2/3/4 (тот же объект, если уже есть). @param {number[]} v @param {any} old */
+function vec(v, old) {
+  const C = v.length === 2 ? THREE.Vector2 : v.length === 3 ? THREE.Vector3 : v.length === 4 ? THREE.Vector4 : null;
+  if (!C) return v;
+  const out = old instanceof C ? old : new C();
+  return out.fromArray(v);
 }

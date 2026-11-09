@@ -6,9 +6,9 @@
 //   const glows = new GlowBatch();
 //   glows.add([x, y, z], 1.7, [1, .9, .7], { night: true, intensity: 1 });
 //   group.add(glows.build(engine.materials));
-// @ts-nocheck
+// @ts-check
 import * as THREE from "three";
-import { rgb } from "./palette.js";
+import { currentPalette } from "./palette.js";
 
 export const GLOW_VERTEX = /* glsl */`
   attribute vec3 aCenter;
@@ -49,13 +49,15 @@ export const GLOW_FRAGMENT = /* glsl */`
 `;
 
 export class GlowBatch {
-  constructor() {
+  /** @param {import("./palette.js").Palette} [palette]  палитра для имён цветов (по умолчанию — текущая) */
+  constructor(palette = currentPalette()) {
+    this.palette = palette;
     this.items = [];
   }
 
   /** Ореол в точке p радиусом r (м). opts: night (только ночью), intensity. */
   add(p, r, color, { night = true, intensity = 1 } = {}) {
-    this.items.push({ p, r, c: rgb(color).map(v => v * intensity), night });
+    this.items.push({ p, r, c: this.palette.rgb(color).map(v => v * intensity), night });
     return this;
   }
 

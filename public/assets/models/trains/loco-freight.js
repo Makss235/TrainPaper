@@ -1,3 +1,4 @@
+// @ts-check
 // Секция грузового электровоза — примитивы: серый кузов с красной полосой, кабина у z = length.
 // Двухсекционный локомотив в составе: "trains/loco-freight", "trains/loco-freight:flip".
 import { bogie } from "./_parts.js";

@@ -1,3 +1,4 @@
+// @ts-check
 // Пример детальной модели (examples): общий строитель пассажирского вагона по спецификации.
 // Общий строитель пассажирского вагона: кузов по поперечному профилю, борта с настоящими
 // оконными проёмами (стекло утоплено, у проёма есть откосы), ливрея текстурой, табличка в окне,
@@ -25,8 +26,8 @@
 //   glassBands  [{ z0, z1, y0, y1 }] — сплошные стеклянные ленты поверх борта (окна электропоезда)
 // Геометрия строится один раз на спецификацию и общая у всех вагонов этого типа.
 import * as THREE from "three";
-import { clipAxis } from "../../../js/lib/shadow.js";
-import { roundRect } from "../../../js/lib/geom.js";
+import { clipAxis } from "../../../shared/clip.js";
+import { roundRect } from "../../../shared/geom.js";
 import { geometry } from "../../../../engine/index.js";
 
 const { Batch, cap, extrude, flat, merge, reveal, wall } = geometry;

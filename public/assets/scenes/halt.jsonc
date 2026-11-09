@@ -1,0 +1,85 @@
+// «Промежуточная станция» — целевая сцена модуля rail/: низкая платформа у двух главных путей,
+// за станцией пути уходят кривой влево. Электрички останавливаются у платформы раз в 20 минут,
+// скорый проходит без остановки, грузовой — по второму пути. Поезда появляются и исчезают по строкам
+// расписания (Schedule) по часам симуляции: в ускорении (engine.time.scale = 60) видно всё подряд.
+//
+// Координаты — метры: x — поперёк пути (вправо), y — вверх от головки рельса, z — вдоль пути;
+// камера у z = 0 смотрит в сторону −z. Пол низкой платформы — 0,35 м над головкой рельса.
+// Оси путей начинаются у z = 300 (за спиной камеры): прямая 600 м, дуга влево, прямая к горизонту.
+{
+  "name": "Промежуточная станция",
+  "environment": {
+    "azimuth": 200,
+    "weather": "partly",
+    "shadows": { "x": [-16, 14], "y": [-1, 10], "z": [12, -110] },
+    // чуть тёплый свет: остановочный пункт в поле
+    "sun": { "intensity": 1.02, "color": "#fff6ea" }
+  },
+  // пост-обработка сцены: ночью — ореолы ярких огней
+  "post": [{ "type": "bloom", "amount": 0.45 }],
+  "objects": [
+    // ---------- камеры ----------
+    { "name": "Основной", "position": [-0.6, 2.0, 0],
+      "components": [{ "type": "Camera", "main": true, "label": "Основной", "target": [2.4, 1.6, -60], "focal": [0.58, 1.0], "center": [0.42, 0.45] },
+                     { "type": "CameraParallax" }] },
+    { "name": "Кривая", "position": [14, 5, -330],
+      "components": [{ "type": "Camera", "label": "Кривая", "target": [-36, 1.5, -620], "focal": [0.5, 0.86], "center": [0.5, 0.46] },
+                     { "type": "CameraParallax" }] },
+    { "name": "С моста", "position": [11, 7.5, 18],
+      "components": [{ "type": "Camera", "label": "С моста", "target": [3, 0.5, -80], "focal": [0.52, 0.9], "center": [0.48, 0.48] }] },
+
+    // ---------- дальний план ----------
+    { "name": "Земля", "position": [0, -0.32, 0], "components": [{ "type": "Model", "model": "environment/ground", "castShadow": false }] },
+    { "name": "Холмы", "components": [{ "type": "Model", "model": "environment/hills", "castShadow": false, "params": { "seed": 5 } }] },
+    // город у горизонта — картинка на заднике; ночью светятся окна
+    { "name": "Город вдали", "components": [{ "type": "Backdrop", "texture": "img/backdrops/city.png", "nightTexture": "img/backdrops/city-night.png",
+      "distance": 2600, "height": 120, "bottom": -6, "from": -48, "to": 28, "fog": 0.6 }] },
+    { "name": "Деревья слева", "position": [-16, -0.32, -10],
+      "repeat": { "count": 40, "step": [0, 0, -10], "jitter": [3, 0, 3], "scaleJitter": 0.25, "seed": 41 },
+      "components": [{ "type": "Model", "model": "environment/tree", "params": { "color": "tree1" } }] },
+    { "name": "Деревья справа", "position": [20, -0.32, 20],
+      "repeat": { "count": 34, "step": [0, 0, -11], "jitter": [3, 0, 3], "scaleJitter": 0.3, "seed": 43 },
+      "components": [{ "type": "Model", "model": "environment/tree", "params": { "color": "tree3", "seed": 3 } }] },
+    { "name": "Роща за кривой", "position": [-90, -0.32, -380],
+      "repeat": { "count": 26, "step": [-14, 0, -12], "jitter": [6, 0, 6], "scaleJitter": 0.3, "seed": 47 },
+      "components": [{ "type": "Model", "model": "environment/tree", "params": { "color": "tree2", "seed": 5 } }] },
+
+    // ---------- пути: прямая, дуга влево, прямая; у второго пути дуга на 4,1 м больше — пути параллельны ----------
+    { "name": "Путь 1", "position": [3.1, 0, 300],
+      "components": [{ "type": "Model", "model": "station/track" },
+                     { "type": "Track", "segments": [{ "straight": 600 }, { "arc": { "radius": 1200, "angle": 14 } }, { "straight": 2600 }], "visible": [250, 1500] }] },
+    { "name": "Путь 2", "position": [7.2, 0, 300],
+      "components": [{ "type": "Model", "model": "station/track" },
+                     { "type": "Track", "segments": [{ "straight": 600 }, { "arc": { "radius": 1204.1, "angle": 14 } }, { "straight": 2600 }], "visible": [250, 1500] }] },
+    { "name": "Контактная сеть", "position": [5.15, 0, 10],
+      "components": [{ "type": "Model", "model": "station/catenary", "params": { "tracks": [-2.05, 2.05], "span": 50, "count": 7 } }] },
+
+    // ---------- низкая платформа с навесом ----------
+    { "name": "Платформа", "position": [-2, 0, 10],
+      "components": [{ "type": "Model", "model": "station/platform", "params": { "length": 160, "width": 6.7, "height": 0.35, "edges": ["+x"], "tactile": null }, "castShadow": false }] },
+    { "name": "Навес", "position": [-3.2, 0.35, -12],
+      "components": [{ "type": "Model", "model": "station/canopy", "params": { "width": 4.2, "length": 24, "height": 3.1, "columns": [-1.4], "step": 7.5 } }] },
+    { "name": "Светильник навеса", "prefab": "canopy-lamp", "position": [-3.2, 3.45, -16], "repeat": { "count": 3, "step": [0, 0, -7.5] } },
+    { "name": "Фонарь", "prefab": "lamp", "position": [-4.7, 0.35, 4], "repeat": { "count": 6, "step": [0, 0, -28] } },
+    { "name": "Скамейка", "prefab": "bench", "position": [-4.4, 0.35, -18], "rotation": [0, 90, 0], "repeat": { "count": 2, "step": [0, 0, -9] } },
+
+    // ---------- остановка: середина электрички — у середины платформы ----------
+    { "name": "Остановочный пункт", "position": [3.1, 0, -62],
+      "components": [{ "type": "StopPoint", "track": "Путь 1", "align": "center", "platform": { "top": 0.35, "edge": 1.75, "side": "left" } }] },
+
+    // ---------- движение по расписанию ----------
+    // direction −1 — к уменьшению s: из-за кривой к камере; 1 — от камеры к кривой.
+    // every — повтор, минуты; dwell — стоянка, с; speed — скорость прохода, м/с.
+    { "name": "Движение", "components": [
+      { "type": "TrainManager", "pause": 20 },
+      { "type": "Schedule", "rows": [
+        { "id": "6601", "number": "6601", "from": "Тверь", "to": "Москва", "consist": "emu-fast", "track": "Путь 1",
+          "stop": "Остановочный пункт", "action": "stop", "arrive": "00:05", "every": 20, "dwell": 40, "direction": -1,
+          "motion": { "maxSpeed": 22, "brake": 0.9, "accel": 0.8 } },
+        { "id": "030А", "number": "030А", "from": "Санкт-Петербург", "to": "Москва", "consist": "fpk-long", "track": "Путь 1",
+          "stop": "Остановочный пункт", "action": "pass", "arrive": "00:15", "every": 60, "speed": 33, "direction": -1 },
+        { "id": "гр-1", "consist": "freight", "track": "Путь 2", "action": "pass", "arrive": "00:32", "every": 60, "speed": 20, "direction": 1 }
+      ] }
+    ] }
+  ]
+}

@@ -1,3 +1,4 @@
+// @ts-check
 // Детальная модель: boxcar.
 import { boxcar } from "./_freight.js";
 

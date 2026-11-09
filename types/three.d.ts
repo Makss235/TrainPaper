@@ -2,6 +2,28 @@
 // Нужны полные типы — установите @types/three@0.160 и удалите этот файл.
 // Список имён собран из кода движка и моделей; новое имя THREE.* — добавьте строку сюда.
 declare module "three" {
+  export const DataTexture: any; export type DataTexture = any;
+  export const RGBAFormat: any; export type RGBAFormat = any;
+  export const FloatType: any; export type FloatType = any;
+  export const Frustum: any; export type Frustum = any;
+  export const Sphere: any; export type Sphere = any;
+  export const Color: any; export type Color = any;
+  export const Line: any; export type Line = any;
+  export const LineSegments: any; export type LineSegments = any;
+  export const LineBasicMaterial: any; export type LineBasicMaterial = any;
+  export const EdgesGeometry: any; export type EdgesGeometry = any;
+  export const SphereGeometry: any; export type SphereGeometry = any;
+  export const HalfFloatType: any; export type HalfFloatType = any;
+  export const LinearMipmapLinearFilter: any; export type LinearMipmapLinearFilter = any;
+  export const RepeatWrapping: any; export type RepeatWrapping = any;
+  export const Data3DTexture: any; export type Data3DTexture = any;
+  export const SRGBColorSpace: any; export type SRGBColorSpace = any;
+  export const Box3: any; export type Box3 = any;
+  export const Raycaster: any; export type Raycaster = any;
+  export const MathUtils: any; export type MathUtils = any;
+  export const AdditiveBlending: any; export type AdditiveBlending = any;
+  export const BackSide: any; export type BackSide = any;
+  export const Camera: any; export type Camera = any;
   export const AddEquation: any; export type AddEquation = any;
   export const AxesHelper: any; export type AxesHelper = any;
   export const BoxGeometry: any; export type BoxGeometry = any;

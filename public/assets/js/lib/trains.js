@@ -1,3 +1,4 @@
+// @ts-check
 // Какой поезд сейчас «стоит у платформы» и что про него написать.
 
 const ARRIVED_GRACE = 10 * 60000;     // прибывший поезд показываем ещё 10 минут
@@ -7,7 +8,7 @@ const ms = s => (s == null ? null : s * 1000);
 
 /** Состояние поезда в момент now или null, если он уже не актуален. */
 export function stateOf(train, now) {
-  const A = ms(train.arrival?.expected), D = ms(train.departure?.expected);
+  const A = /** @type {number} */ (ms(train.arrival?.expected)), D = /** @type {number} */ (ms(train.departure?.expected));
   if (train.status === "OUT" && (!D || now > D)) return null;
   if (train.kind === "arrival") {
     if (now < A) return { phase: "arriving", event: "arrival", time: A };

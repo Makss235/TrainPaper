@@ -1,3 +1,4 @@
+// @ts-check
 // Движение поезда вдоль пути: offset в метрах, + — вперёд (к голове поезда).
 // Отправление — разгон, прибытие — торможение до полной остановки.
 
@@ -22,7 +23,7 @@ export class Motion {
 
   animate(from, to, ms, ease) {
     this.moving = true;
-    return new Promise(resolve => {
+    return new Promise((/** @type {(v?: any) => void} */ resolve) => {
       const t0 = performance.now();
       const step = now => {
         const t = Math.min(1, (now - t0) / ms);
@@ -50,6 +51,8 @@ export class Motion {
 /**
  * Очередь смен поезда: уходящий уезжает, затем подходит следующий.
  * firstInstant — самый первый поезд просто стоит у платформы (без анимации при загрузке).
+ * @param {{motion: any, departDistance: () => number, arriveDistance: () => number, show: (item: any) => void, instant: () => boolean,
+ *   departMs?: number, arriveMs?: number, departEase?: (t: number) => number, arriveEase?: (t: number) => number, pauseMs?: number, firstInstant?: boolean}} o
  */
 export function swapper({ motion, departDistance, arriveDistance, show, instant,
   departMs, arriveMs, departEase, arriveEase, pauseMs = 0, firstInstant = false }) {

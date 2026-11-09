@@ -1,3 +1,4 @@
+// @ts-check
 // Светодиодное табло над платформой: текст из данных РЖД в HTML с точечной маской. На экран табло
 // в 3D его натягивает компонент движка HtmlScreen. Текст остаётся настоящим текстом — чёткий при любом ракурсе.
 //
@@ -8,7 +9,7 @@ import { localTime } from "../lib/app.js";
 import { city, expand } from "../lib/names.js";
 import { countdown, delayInfo, headline, numberText, stopMinutes } from "../lib/trains.js";
 
-const $ = id => document.getElementById(id);
+const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
 function fitRow(node, max) {
   node.style.fontSize = "";
@@ -39,7 +40,7 @@ function setTicker(text) {
 function stepTicker() {
   if (document.hidden || reduceMotion.matches) return;
   const node = $("bTicker");
-  if (!tickerW) tickerW = Math.round((node.firstChild?.offsetWidth || 0) / LED) * LED;
+  if (!tickerW) tickerW = Math.round((/** @type {HTMLElement | null} */ (node.firstChild)?.offsetWidth || 0) / LED) * LED;
   if (!tickerW) return;
   tickerX -= LED;
   if (-tickerX >= tickerW) tickerX += tickerW;

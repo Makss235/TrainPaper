@@ -9,9 +9,9 @@
 //   lines.add([x, y, z], [x, y, z], 0.012, "#33373c");      // отрезок, толщина в метрах, цвет
 //   lines.line([[...], [...], ...], 0.015, "#33373c");       // ломаная
 //   group.add(lines.build(engine.materials));                // один меш на все отрезки
-// @ts-nocheck
+// @ts-check
 import * as THREE from "three";
-import { rgb } from "./palette.js";
+import { currentPalette } from "./palette.js";
 import { COMMON, LIGHTING } from "./shaders.js";
 
 export const LINE_VERTEX = /* glsl */`
@@ -82,14 +82,16 @@ export const LINE_FRAGMENT = /* glsl */`
 `;
 
 export class LineBatch {
-  constructor() {
+  /** @param {import("./palette.js").Palette} [palette]  палитра для имён цветов (по умолчанию — текущая) */
+  constructor(palette = currentPalette()) {
+    this.palette = palette;
     this.a = []; this.b = []; this.side = []; this.width = []; this.color = []; this.index = [];
     this.count = 0;
   }
 
   /** Отрезок a→b толщиной width (м) цвета color. */
   add(a, b, width, color = "wire") {
-    const c = rgb(color), base = this.count * 4;
+    const c = this.palette.rgb(color), base = this.count * 4;
     for (const [s, e] of [[-1, 0], [1, 0], [-1, 1], [1, 1]]) {
       this.a.push(a[0], a[1], a[2]);
       this.b.push(b[0], b[1], b[2]);

@@ -1,3 +1,4 @@
+// @ts-check
 // Пример детальной модели (examples): ливрея на canvas. См. assets/models/index.jsonc → aliases.
 // Ливреи — рисунок борта на canvas, который натягивается на кузов как текстура.
 // Мелкие повторяющиеся детали (гофра, рёбра) сюда не рисуются: их делает шейдер узором без ряби.
@@ -5,8 +6,8 @@
 //
 // Ливрея ФПК строится из тех же фигур lib/coach.js, что и вид «Вагон», — она одна на оба вида.
 import * as THREE from "three";
-import { CAR_L, coachShapes, RZD_LOGO } from "../../../js/lib/coach.js";
-import { MATERIALS } from "../../../js/lib/palette.js";
+import { CAR_L, coachShapes, RZD_LOGO } from "../../../shared/livery/coach-shapes.js";
+import { MATERIALS } from "../../../shared/materials.js";
 
 /** Холст ливреи: width × height пикселей; u, v (0…1) → пиксели. */
 export function liveryCanvas(width, height) {

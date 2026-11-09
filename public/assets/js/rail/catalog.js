@@ -1,5 +1,6 @@
 // Каталог составов: читает assets/data/trains.jsonc — какие бывают составы и какой показать
 // для поезда с табло РЖД. Сам код не знает ни одного вагона — только данные.
+// Вагон в составе — модель ("trains/coach-fpk") или префаб вагона ("cars/coach-lit" → assets/prefabs/cars/coach-lit.jsonc).
 // @ts-check
 import { loadData, rng } from "../../../engine/index.js";
 
@@ -42,13 +43,13 @@ export class TrainCatalog {
   }
 
   /**
-   * Список вагонов состава от ХВОСТА к голове: [{ model, flip }].
-   * @param {string} typeId
+   * Список вагонов состава от ХВОСТА к голове: [{ model, flip }] (model — имя модели или префаба "cars/…").
+   * @param {string | any[]} typeId  имя состава из каталога или сам состав — список, как consist в trains.jsonc
    * @param {number} [seed]  для случайной смеси (грузовой)
    */
   consist(typeId, seed = 1) {
-    const type = this.types[typeId] || this.types[this.default];
-    if (!type) return [];
+    const entries = Array.isArray(typeId) ? typeId : (this.types[typeId] || this.types[this.default])?.consist;
+    if (!entries) return [];
     const random = rng(seed);
     /** @type {{model: string, flip: boolean}[]} */
     const list = [];
@@ -56,7 +57,7 @@ export class TrainCatalog {
       const [model, ...flags] = entry.split(":");
       list.push({ model, flip: flags.includes("flip") });
     };
-    for (const e of type.consist) {
+    for (const e of entries) {
       if (typeof e === "string") push(e);
       else if (e.repeat) for (let i = 0; i < e.repeat; i++) push(e.model);
       else if (e.random) {

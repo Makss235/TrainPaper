@@ -1,3 +1,4 @@
+// @ts-check
 // Пассажирская платформа из коробок: тело, пол с плиткой, полосы разметки у края к пути, пандусы.
 // Начало координат — середина ближнего торца платформы на уровне головки рельса (y = 0);
 // платформа идёт от z = 0 в сторону −z на length. Пол — на высоте height.
@@ -22,10 +23,11 @@ export default {
     // тело под полом
     g.add(kit.boxFrom([x0, x1], [-.32, H - t], [0, -L], { color: "platformSide" }));
     // полосы от каждого края к пути
+    /** @type {{d: number[], color: string}[]} */
     const bands = [{ d: [0, p.coping], color: "coping" }];
     if (p.tactile) bands.push({ d: [Math.max(p.coping, p.tactile[0]), p.tactile[1]], color: "tactile" });
-    if (p.line) bands.push({ d: [Math.max(bands.at(-1).d[1], p.line[0]), p.line[1]], color: "yellow" });
-    const inner = bands.at(-1).d[1];
+    if (p.line) bands.push({ d: [Math.max(bands[bands.length - 1].d[1], p.line[0]), p.line[1]], color: "yellow" });
+    const inner = bands[bands.length - 1].d[1];
     let m0 = x0, m1 = x1;
     for (const e of p.edges) {
       const s = e === "-x" ? -1 : 1, edge = s > 0 ? x1 : x0;

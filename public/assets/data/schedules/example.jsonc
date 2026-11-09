@@ -1,0 +1,15 @@
+// Пример расписания для компонента Schedule: { "type": "Schedule", "src": "data/schedules/example.jsonc" }
+// (путь — от папки assets/). Поля строки — docs/rail.md. Времена — по часам симуляции (engine.time),
+// "ЧЧ:ММ" — ближайшее такое время в часовом поясе станции; every — повтор каждые N минут.
+{
+  "rows": [
+    // электричка с остановкой раз в 20 минут: :05, :25, :45
+    { "id": "6601", "number": "6601", "from": "Тверь", "to": "Москва", "consist": "emu-fast", "track": "Путь 1",
+      "stop": "Остановочный пункт", "action": "stop", "arrive": "00:05", "every": 20, "dwell": 40, "direction": -1 },
+    // скорый без остановки раз в час
+    { "id": "030А", "number": "030А", "from": "Санкт-Петербург", "to": "Москва", "consist": "fpk-long", "track": "Путь 1",
+      "stop": "Остановочный пункт", "action": "pass", "arrive": "00:15", "every": 60, "speed": 33, "direction": -1 },
+    // грузовой по второму пути
+    { "id": "гр-1", "consist": "freight", "track": "Путь 2", "action": "pass", "arrive": "00:32", "every": 60, "speed": 20, "direction": 1 }
+  ]
+}

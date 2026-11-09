@@ -5,6 +5,7 @@ from .app import make_server
 from .geo import StationGeo
 from .rzd import RzdClient
 from .service import BoardService
+from .weather import WeatherService
 
 
 def main():
@@ -16,7 +17,7 @@ def main():
 
     client = RzdClient()
     service = BoardService(client, StationGeo(client, config.STATIONS_FILE, config.GEO_CACHE_FILE))
-    server = make_server(config.HOST, config.PORT, service, config.PUBLIC_DIR)
+    server = make_server(config.HOST, config.PORT, service, config.PUBLIC_DIR, weather=WeatherService())
     host = "localhost" if config.HOST in ("127.0.0.1", "0.0.0.0") else config.HOST
     logging.getLogger("trainpaper").info(
         "TrainPaper: http://%s:%s  (вагон: /flat/, платформа: /platform/)", host, config.PORT)

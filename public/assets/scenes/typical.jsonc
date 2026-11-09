@@ -29,6 +29,8 @@
     // ---------- дальний план ----------
     { "name": "Земля", "position": [0, -0.32, 0], "components": [{ "type": "Model", "model": "environment/ground", "castShadow": false }] },
     { "name": "Город", "components": [{ "type": "Model", "model": "environment/skyline", "params": { "seed": 7 }, "castShadow": false }] },
+    // панорама города на заднике (картинка, ночью — огни окон) — раскомментируйте:
+    // { "name": "Панорама", "components": [{ "type": "Backdrop", "texture": "img/backdrops/city.png", "nightTexture": "img/backdrops/city-night.png", "distance": 2200, "height": 150, "from": -75, "to": 75 }] },
     { "name": "Деревья слева", "position": [-15, -0.32, -30],
       "repeat": { "count": 74, "step": [0, 0, -9], "jitter": [2.5, 0, 2], "scaleJitter": 0.25, "seed": 17 },
       "components": [{ "type": "Model", "model": "environment/tree", "params": { "color": "tree1" } }] },
@@ -38,10 +40,14 @@
     { "name": "Пешеходный мост", "position": [3, 0, -165], "components": [{ "type": "Model", "model": "station/footbridge", "params": { "piers": [-12, 12] } }] },
 
     // ---------- пути и контактная сеть (уходят к горизонту) ----------
+    // ось пути — от z = 300 (за спиной камеры) к горизонту; поезда видны на участке visible (s, м от начала оси)
     { "name": "Путь 1", "position": [4.42, 0, 0],
-      "components": [{ "type": "Model", "model": "station/track" }, { "type": "RailTrack", "platform": { "top": 1.1, "edge": 2.5 } }] },
+      "components": [{ "type": "Model", "model": "station/track" }, { "type": "Track", "points": [[0, 0, 300], [0, 0, -3000]], "visible": [260, 1300] }] },
     { "name": "Путь 2", "position": [9.7, 0, 0],
-      "components": [{ "type": "Model", "model": "station/track" }, { "type": "RailTrack" }] },
+      "components": [{ "type": "Model", "model": "station/track" }, { "type": "Track", "points": [[0, 0, 300], [0, 0, -3000]], "visible": [200, 1400] }] },
+    // поезд с табло встаёт хвостом в 7,2 м от камеры; платформа слева от пути (если смотреть к горизонту)
+    { "name": "Платформа 1", "position": [4.42, 0, -7.2],
+      "components": [{ "type": "StopPoint", "track": "Путь 1", "align": "tail", "platform": { "top": 1.1, "edge": 1.92, "side": "left" } }] },
     { "name": "Контактная сеть", "position": [7.06, 0, -30],
       "components": [{ "type": "Model", "model": "station/catenary", "params": { "tracks": [-2.64, 2.64], "count": 18 } }] },
     { "name": "Портал", "position": [3.8, 0, -62], "components": [{ "type": "Model", "model": "station/gantry", "params": { "width": 18.4 } }] },
@@ -55,15 +61,17 @@
     { "name": "Табло", "prefab": "departure-board", "position": [-1.8, 1.1, -6.3] },
     { "name": "Скамейка", "prefab": "bench", "position": [-3.55, 1.1, -20], "rotation": [0, 90, 0], "repeat": { "count": 5, "step": [0, 0, -24] } },
 
-    // ---------- движение поездов ----------
+    // ---------- движение поездов (rail/: менеджер, расписание, табло РЖД как источник) ----------
     { "name": "Движение", "components": [
-      { "type": "TrainTraffic", "role": "board", "track": "Путь 1",
-        // приходит электровозом вперёд из-за горизонта, проходит мимо и встаёт хвостом в 7,2 м от камеры
-        "arrival": { "heading": 1, "stop": { "far": -7.2 }, "from": 260, "ms": 21000 },
-        // уходит хвостом мимо камеры
-        "departure": { "heading": 1, "stop": { "far": -7.2 }, "ms": 9000 } }
-      // транзитный грузовой по второму пути раз в 4–12 минут — раскомментируйте:
-      // , { "type": "TrainTraffic", "role": "passing", "track": "Путь 2", "train": "freight", "heading": -1, "speed": 20, "every": [240, 720], "first": 30 }
+      { "type": "TrainManager", "pause": 1.8 },
+      { "type": "Schedule" },
+      // поезд с табло: приходит электровозом вперёд из-за горизонта (к уменьшению s), встаёт у «Платформы 1»,
+      // уходит дальше — мимо камеры
+      { "type": "RzdBoard", "track": "Путь 1", "motion": { "brake": 1.2, "accel": 0.6 },
+        "arrival": { "stop": "Платформа 1", "direction": -1, "approach": 420 },
+        "departure": { "stop": "Платформа 1", "direction": -1, "approach": 420 } }
+      // транзитный грузовой по второму пути раз в 4–12 минут — раскомментируйте (скрипт assets/scripts/rail/random-traffic.js):
+      // , { "type": "rail/random-traffic", "consists": ["freight"], "tracks": ["Путь 2"], "direction": 1, "every": [240, 720], "speed": [15, 25], "first": 30 }
     ] }
   ]
 }

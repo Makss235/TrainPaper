@@ -10,7 +10,7 @@ import * as THREE from "three";
 
 const DEG = Math.PI / 180;
 const lerp = (a, b, t) => a + (b - a) * t;
-const ease = t => (t < .5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+/** @type {Record<string, any>} */
 const DEFAULT_LENS = { fov: 0, focal: [.6, 1.02], center: [.5, .5], portrait: null, near: .3, far: 6000 };
 
 export class CameraSystem {
@@ -22,7 +22,10 @@ export class CameraSystem {
     /** @type {any[]} компоненты Camera в сцене */
     this.cameras = [];
     this.active = null;
+    /** @type {{from: any, to: any, e: number, k: number} | null} */
     this.blend = null;
+    /** @type {AbortController | null} */
+    this.blendAbort = null;
     this.pointer = [0, 0];
     this.smooth = [0, 0];
     this.size = [1, 1];
@@ -65,8 +68,16 @@ export class CameraSystem {
     const cam = typeof which === "string" ? this.cameras.find(c => c.gameObject.name === which || c.props.label === which) : which;
     if (!cam) { console.warn(`Нет камеры «${which}». Есть: ${this.list().map(c => c.name).join(", ")}`); return; }
     const to = this.#poseOf(cam);
-    if (ms > 0 && this.active) this.blend = { from: this.pose, to, t0: performance.now(), ms };
-    else { this.pose = to; this.blend = null; this.layout(...this.size); }
+    this.blendAbort?.abort();
+    this.blendAbort = null;
+    if (ms > 0 && this.active && this.engine.options.animate !== false) {
+      // плавный переход — по реальному времени (engine.tween), поза считается в update()
+      const ac = (this.blendAbort = new AbortController());
+      this.blend = { from: this.pose, to, e: 0, k: 0 };
+      this.engine.tween({ duration: ms / 1000, ease: "inOutCubic", signal: ac.signal,
+        onUpdate: (/** @type {number} */ e, /** @type {number} */ k) => { if (this.blend) { this.blend.e = e; this.blend.k = k; } this.animate(); } })
+        .catch(() => {});
+    } else { this.pose = to; this.blend = null; this.layout(...this.size); }
     this.active = cam;
     this.engine.events.emit("cameraChanged", cam);
     this.animate();
@@ -118,8 +129,7 @@ export class CameraSystem {
     }
     let moving = false;
     if (this.blend) {
-      const { from, to, t0, ms } = this.blend;
-      const k = Math.min(1, (performance.now() - t0) / ms), e = ease(k);
+      const { from, to, e, k } = this.blend;
       this.pose = {
         position: from.position.map((v, i) => lerp(v, to.position[i], e)),
         yaw: lerp(from.yaw, to.yaw, e), pitch: lerp(from.pitch, to.pitch, e), roll: lerp(from.roll || 0, to.roll || 0, e),

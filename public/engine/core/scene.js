@@ -18,8 +18,11 @@
 // @ts-check
 import * as THREE from "three";
 import { getComponentClass } from "./component.js";
-import { clone, deepMerge, isPlainObject, loadData, rng } from "./data.js";
+import { isPlainObject, loadData } from "./data.js";
 import { GameObject } from "./game-object.js";
+import { applyPrefab, expandRepeat } from "./prefab.js";
+
+export { applyPrefab, expandRepeat };
 
 const DEG = Math.PI / 180;
 
@@ -56,7 +59,7 @@ export class Scene {
     this.settings = data.environment || {};
     // сначала всё, что нужно загрузить заранее: префабы, модели, файлы
     const objects = await this.resolve(data.objects || []);
-    await this.#preload(objects);
+    await this.preload(objects);
     for (const od of objects) this.root.add(this.instantiate(od));
     this.started = true;
     this.root.awake();
@@ -94,12 +97,24 @@ export class Scene {
   /** @param {string} tag */
   findByTag(tag) { return this.findAll(o => o.tags.includes(tag)); }
 
-  /** Все компоненты типа во всей сцене. @param {string} type */
+  /**
+   * Все компоненты типа (имя или класс) во всей сцене.
+   * @template {import("./component.js").Component} T
+   * @param {string | (new (...a: any[]) => T)} type
+   * @returns {T[]}
+   */
   components(type) {
-    /** @type {import("./component.js").Component[]} */
-    const out = [];
-    this.root.traverse(o => out.push(...o.getComponents(type)));
-    return out;
+    return this.root.getComponentsInChildren(type);
+  }
+
+  /**
+   * Первый компонент типа во всей сцене.
+   * @template {import("./component.js").Component} T
+   * @param {string | (new (...a: any[]) => T)} type
+   * @returns {T | undefined}
+   */
+  findComponent(type) {
+    return this.root.getComponentInChildren(type);
   }
 
   /** Сцена как данные (для сохранения из инспектора). */
@@ -131,8 +146,12 @@ export class Scene {
     return out;
   }
 
-  /** @param {Record<string, any>[]} objects */
-  async #preload(objects) {
+  /**
+   * Загрузить заранее всё, что нужно объектам: скрипты (неизвестные type), модели (Model.preload) и т. п.
+   * @param {Record<string, any>[]} objects
+   */
+  async preload(objects) {
+    await this.engine.assets.preloadScripts(objects);
     /** @type {Promise<any>[]} */
     const tasks = [];
     const walk = (/** @type {Record<string, any>} */ od) => {
@@ -169,6 +188,11 @@ export class Scene {
     for (const cd of od.components || []) {
       if (cd.remove) continue;
       const { type, id, ...props } = cd;
+      // скрипт не загрузился — об этом уже сказано один раз; объект остаётся без компонента
+      if (!getComponentClass(type)) {
+        this.engine.assets.report(`component:${type}`, `Нет компонента «${type}» (объект «${go.name}»)`);
+        continue;
+      }
       try {
         const comp = go.addComponent(type, props);
         if (id !== undefined) comp.key = id;
@@ -236,56 +260,4 @@ export class Scene {
     }
     this.engine.invalidate("scene", "shadow");
   }
-}
-
-/**
- * Префаб + данные экземпляра: поля экземпляра заменяют поля префаба, компоненты с тем же
- * type (и id, если указан) сливаются по свойствам, новые добавляются, { type, remove: true } — убирает.
- * @param {Record<string, any>} prefab
- * @param {Record<string, any>} inst
- */
-export function applyPrefab(prefab, inst) {
-  const { prefab: _p, components: instComps, children: instChildren, ...rest } = inst;
-  void _p;
-  const out = { ...clone(prefab), ...clone(rest) };
-  const comps = clone(prefab.components || []);
-  for (const c of instComps || []) {
-    const i = comps.findIndex((/** @type {any} */ p) => p.type === c.type && (c.id === undefined || p.id === c.id));
-    if (i >= 0) comps[i] = c.remove ? { ...comps[i], remove: true } : deepMerge(comps[i], c);
-    else comps.push(clone(c));
-  }
-  out.components = comps;
-  out.children = [...clone(prefab.children || []), ...clone(instChildren || [])];
-  return out;
-}
-
-/**
- * Повтор: { count, step: [dx, dy, dz], rotate: [°], jitter: [x, y, z], scaleJitter, seed, name }
- * → count копий. jitter — случайный сдвиг ±, scaleJitter — случайный масштаб ±доля,
- * name — шаблон имени ("Фонарь {i}"), по умолчанию «Имя 1», «Имя 2»…
- * @param {Record<string, any>} od
- * @returns {Record<string, any>[]}
- */
-export function expandRepeat(od) {
-  const r = od.repeat;
-  if (!r) return [od];
-  const { repeat: _r, ...base } = od;
-  void _r;
-  const random = rng(r.seed ?? 1);
-  const out = [];
-  const pos = base.position || [0, 0, 0], rot = base.rotation || [0, 0, 0];
-  const sc = typeof base.scale === "number" ? [base.scale, base.scale, base.scale] : base.scale || [1, 1, 1];
-  for (let i = 0; i < (r.count ?? 1); i++) {
-    const j = r.jitter || [0, 0, 0], step = r.step || [0, 0, 0], rotate = r.rotate || [0, 0, 0];
-    const k = 1 + (r.scaleJitter || 0) * (random() * 2 - 1);
-    const rr = r.randomRotate ? r.randomRotate.map((/** @type {number} */ a) => (random() * 2 - 1) * a) : [0, 0, 0];
-    out.push({
-      ...clone(base),
-      name: (r.name || `${base.name || "Объект"} {i}`).replace("{i}", String(i + 1)),
-      position: pos.map((/** @type {number} */ v, /** @type {number} */ a) => v + step[a] * i + (j[a] || 0) * (random() * 2 - 1)),
-      rotation: rot.map((/** @type {number} */ v, /** @type {number} */ a) => v + rotate[a] * i + rr[a]),
-      scale: sc.map((/** @type {number} */ v) => v * k),
-    });
-  }
-  return out;
 }

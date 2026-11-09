@@ -1,3 +1,4 @@
+// @ts-check
 // Плёночное зерно поверх сцены. Тайл шума рисуется один раз на canvas: SVG-фильтр turbulence
 // в фоне пересчитывался бы при каждой перерисовке неба и съедал половину кадров.
 
@@ -6,7 +7,7 @@ export function initGrain(node = document.getElementById("grain"), size = 256) {
   try {
     const canvas = document.createElement("canvas");
     canvas.width = canvas.height = size;
-    const ctx = canvas.getContext("2d");
+    const ctx = /** @type {CanvasRenderingContext2D} */ (canvas.getContext("2d"));
     const img = ctx.createImageData(size, size);
     let seed = 1234567;
     for (let i = 0; i < img.data.length; i += 4) {

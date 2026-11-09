@@ -25,9 +25,9 @@
     { "name": "Лес справа", "position": [24, -0.32, -30], "repeat": { "count": 61, "step": [0, 0, -8], "jitter": [5, 0, 2], "scaleJitter": 0.3, "seed": 31 },
       "components": [{ "type": "Model", "model": "environment/tree", "params": { "trunk": 2.6, "crown": 2.0, "color": "#56705a", "lumps": 2, "seed": 4 } }] },
 
-    { "name": "Путь 1", "position": [4.42, 0, 0], "components": [{ "type": "Model", "model": "station/track", "params": { "back": 20 } }, { "type": "RailTrack", "platform": { "top": 1.1, "edge": 2.5 } }] },
-    { "name": "Путь 2", "position": [9.6, 0, 0], "components": [{ "type": "Model", "model": "station/track", "params": { "back": 20 } }, { "type": "RailTrack" }] },
-    { "name": "Путь 3", "position": [14.8, 0, 0], "components": [{ "type": "Model", "model": "station/track", "params": { "back": 20 } }, { "type": "RailTrack" }] },
+    { "name": "Путь 1", "position": [4.42, 0, 0], "components": [{ "type": "Model", "model": "station/track" }, { "type": "Track", "points": [[0, 0, 300], [0, 0, -3000]], "visible": [270, 800] }] },
+    { "name": "Путь 2", "position": [9.6, 0, 0], "components": [{ "type": "Model", "model": "station/track" }, { "type": "Track", "points": [[0, 0, 300], [0, 0, -3000]], "visible": [270, 800] }] },
+    { "name": "Путь 3", "position": [14.8, 0, 0], "components": [{ "type": "Model", "model": "station/track" }, { "type": "Track", "points": [[0, 0, 300], [0, 0, -3000]], "visible": [270, 800] }] },
     { "name": "Сеть путей 2–3", "position": [12.2, 0, -26], "components": [{ "type": "Model", "model": "station/catenary", "params": { "tracks": [-2.6, 2.6], "span": 55, "count": 14, "height": 9.8 } }] },
     { "name": "Сеть пути 1", "position": [7.0, 0, -26], "components": [{ "type": "Model", "model": "station/catenary", "params": { "tracks": [-2.58], "span": 55, "count": 14, "height": 9.8 } }] },
 
@@ -57,12 +57,18 @@
       "components": [{ "type": "Model", "model": "station/building", "params": { "size": [34, 9.3, 70], "color": "wallDark", "gable": 3,
         "windows": { "rows": 1, "bottom": 3, "width": 3.2, "height": 2.4, "gap": 6 } } }] },
 
+    // тупиковый вокзал: прибывший стоит хвостом в 8 м от камеры, отправляющийся — хвостом у z = 22 к горизонту
+    { "name": "Платформа 1", "position": [4.42, 0, -8],
+      "components": [{ "type": "StopPoint", "track": "Путь 1", "align": "tail", "platform": { "top": 1.1, "edge": 1.92, "side": "left" } }] },
+    { "name": "Отправление", "position": [4.42, 0, 22],
+      "components": [{ "type": "StopPoint", "track": "Путь 1", "align": "tail", "platform": { "top": 1.1, "edge": 1.92, "side": "left" } }] },
     { "name": "Движение", "components": [
-      { "type": "TrainTraffic", "role": "board", "track": "Путь 1",
-        "arrival": { "heading": 1, "stop": { "far": -8 }, "from": 280, "ms": 22000 },
-        "departure": { "heading": -1, "stop": { "near": 22 }, "to": 700, "ms": 11000 },
-        "pause": 2400 }
-      // , { "type": "TrainTraffic", "role": "passing", "track": "Путь 3", "train": "freight", "heading": 1, "speed": 14, "every": [420, 1200], "first": 90 }
+      { "type": "TrainManager", "pause": 2.4 },
+      { "type": "Schedule" },
+      { "type": "RzdBoard", "track": "Путь 1", "motion": { "brake": 1.2, "accel": 0.6 },
+        "arrival": { "stop": "Платформа 1", "direction": -1, "approach": 440 },
+        "departure": { "stop": "Отправление", "direction": 1 } }
+      // , { "type": "rail/random-traffic", "consists": ["freight"], "tracks": ["Путь 3"], "direction": -1, "every": [420, 1200], "speed": [12, 16], "first": 90 }
     ] }
   ]
 }

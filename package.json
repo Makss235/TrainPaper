@@ -1,0 +1,13 @@
+{
+  "name": "trainpaper-dev",
+  "private": true,
+  "description": "Только инструменты разработчика: проверка типов и тесты. Сайт и сервер от Node.js не зависят.",
+  "type": "module",
+  "scripts": {
+    "check": "tsc -p jsconfig.json",
+    "test": "node --import ./tools/test-setup.js --test \"public/**/*.test.js\""
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}

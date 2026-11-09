@@ -12,7 +12,6 @@
 import * as THREE from "three";
 import { GLOW_FRAGMENT, GLOW_VERTEX } from "./glows.js";
 import { LINE_FRAGMENT, LINE_VERTEX } from "./lines.js";
-import { rgb } from "./palette.js";
 import { TOON_FRAGMENT, TOON_VERTEX } from "./shaders.js";
 
 /**
@@ -50,9 +49,13 @@ export class Materials {
   /**
    * @param {import("./lighting.js").LightUniforms} light  uniforms освещения движка
    * @param {{uRes: {value: THREE.Vector2}, uMinPx: {value: number}}} screen  размер буфера сцены
+   * @param {import("./palette.js").Palette} palette  палитра движка (имена цветов)
+   * @param {{maxLights?: number}} [o]  maxLights — сколько источников света читает шейдер
    */
-  constructor(light, screen) {
+  constructor(light, screen, palette, { maxLights = 32 } = {}) {
     this.light = light;
+    this.palette = palette;
+    this.maxLights = maxLights;
     this.screen = screen;
     /** @type {Map<string, THREE.ShaderMaterial>} */
     this.cache = new Map();
@@ -64,9 +67,9 @@ export class Materials {
 
   /** Новый cel-материал. @param {ToonOptions} [opts] */
   create(opts = {}) {
-    const v3 = (/** @type {any} */ c) => new THREE.Vector3(...rgb(c));
+    const v3 = (/** @type {any} */ c) => new THREE.Vector3(...this.palette.rgb(c));
     /** @type {Record<string, string>} */
-    const defines = {};
+    const defines = { MAX_LIGHTS: String(this.maxLights) };
     /** @type {Record<string, {value: any}>} */
     const uniforms = {
       ...this.light,

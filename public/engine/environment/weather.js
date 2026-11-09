@@ -53,58 +53,82 @@ export const WEATHER_LABELS = [
   ["rain", "Дождь"], ["snow", "Снег"], ["fog", "Туман"],
 ];
 
+export const NUMERIC = Object.keys(BASE).filter(k => typeof BASE[/** @type {keyof typeof BASE} */ (k)] === "number");
+/** Поля осадков: при силе погоды масштабируются отдельно от неба (см. mixWeather). */
+const PRECIP = ["rain", "snow", "wet", "snowCover"];
+/** Погода, к которой стремится пресет при силе 0: «переменно». */
+const CALM = "partly";
 
+/** @typedef {typeof BASE & Record<string, any>} WeatherParams */
 
-const NUMERIC = Object.keys(BASE).filter(k => typeof BASE[k] === "number");
+/**
+ * Параметры пресета из таблицы (что не указано — из BASE).
+ * @param {Record<string, Record<string, any>>} table @param {string} key
+ * @returns {WeatherParams}
+ */
+export const weatherParams = (table, key) => ({ ...BASE, ...(table[key] || {}) });
 
-/** Параметры пресета (что не указано — из BASE). @param {string} key */
-export const weatherParams = key => ({ ...BASE, ...(WEATHER[key] || {}) });
-
-/** Добавить или заменить пресет погоды. @param {string} key @param {Record<string, any>} params */
-export function defineWeather(key, params) {
-  WEATHER[key] = params;
+/**
+ * Пресет с силой: 1 — как задан; меньше — плавно к «переменно» (морось), больше — сильнее (ливень, метель).
+ * Небо и свет смешиваются быстрее (слабый дождь — уже пасмурно), осадки и мокрота — пропорционально силе.
+ * @param {Record<string, Record<string, any>>} table
+ * @param {string} key
+ * @param {number} [intensity]  0…1,5
+ * @returns {WeatherParams}
+ */
+export function mixWeather(table, key, intensity = 1) {
+  const full = weatherParams(table, key);
+  if (intensity === 1) return full;
+  const calm = weatherParams(table, CALM);
+  const k = Math.max(0, Math.min(1.5, intensity));
+  const sky = Math.min(1, k * 1.7);                  // небо: морось 0,4 → почти пасмурно
+  /** @type {Record<string, any>} */
+  const out = { ...full };
+  for (const name of NUMERIC) {
+    const a = /** @type {number} */ (calm[name]), b = /** @type {number} */ (full[name]);
+    out[name] = PRECIP.includes(name) ? b * (name === "rain" || name === "snow" ? k : Math.min(1, k * 1.4)) : a + (b - a) * sky;
+  }
+  if (k > 1) {                                        // ливень: темнее и гуще дымка
+    out.dark = Math.min(1, full.dark * (1 + (k - 1) * .8));
+    out.fogNear = full.fogNear / (1 + (k - 1) * .8);
+    out.fogFar = full.fogFar / (1 + (k - 1) * .8);
+  }
+  out.wind = calm.wind.map((/** @type {number} */ v, /** @type {number} */ i) => v + (full.wind[i] - v) * Math.min(1.4, k));
+  return /** @type {WeatherParams} */ (out);
 }
 
 export class WeatherState {
-  constructor(key = "partly") {
-    this.key = key;
-    this.current = weatherParams(key);
+  /** @param {WeatherParams} params */
+  constructor(params) {
+    this.key = "partly";
+    this.intensity = 1;
+    /** @type {WeatherParams} */
+    this.current = params;
     this.from = this.current;
     this.target = this.current;
-    this.t0 = 0;
-    this.ms = 1;
   }
 
-  /** Сменить погоду: instant — сразу (при загрузке), иначе плавно за ms. */
-  set(key, { instant = false, ms = 4000 } = {}) {
+  /** Новая цель; instant — сразу (при загрузке), иначе переход ведёт вызывающий через blend(). */
+  set(key, params, { instant = false, intensity = 1 } = {}) {
     this.key = key;
-    this.target = weatherParams(key);
-    if (instant) {
-      this.current = this.from = this.target;
-      return;
-    }
-    this.from = this.current;
-    this.t0 = performance.now();
-    this.ms = ms;
+    this.intensity = intensity;
+    this.target = params;
+    this.from = instant ? params : this.current;
+    if (instant) this.current = params;
   }
 
   get moving() {
     return this.current !== this.target;
   }
 
-  /** Шаг перехода; возвращает true, пока погода ещё меняется. */
-  step(now = performance.now()) {
-    if (!this.moving) return false;
-    const k = Math.min(1, (now - this.t0) / this.ms), e = k * k * (3 - 2 * k);
-    if (k >= 1) {
-      this.current = this.target;
-      return false;
-    }
+  /** Промежуточное состояние перехода: e — 0…1 (уже со сглаживанием). */
+  blend(e) {
+    if (e >= 1) { this.current = this.target; return; }
+    /** @type {Record<string, any>} */
     const out = {};
     for (const name of NUMERIC) out[name] = this.from[name] + (this.target[name] - this.from[name]) * e;
     out.wind = this.from.wind.map((v, i) => v + (this.target.wind[i] - v) * e);
-    this.current = out;
-    return true;
+    this.current = /** @type {WeatherParams} */ (out);
   }
 
   /**
@@ -133,7 +157,10 @@ export class WeatherState {
   }
 }
 
-/** Код погоды WMO → ключ пресета (для подключения настоящей погоды). */
+/**
+ * Код погоды WMO → ключ пресета (для подключения настоящей погоды).
+ * @param {number} code @param {number | null} [cloudCover]  облачность, %
+ */
 export function fromWmo(code, cloudCover = null) {
   if (code === 0) return "clear";
   if (code <= 2) return cloudCover != null && cloudCover < 30 ? "clear" : "partly";
@@ -142,4 +169,17 @@ export function fromWmo(code, cloudCover = null) {
   if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "snow";
   if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82) || code >= 95) return "rain";
   return "cloudy";
+}
+
+/**
+ * Сила погоды по коду WMO: морось и слабый дождь — меньше 1, ливень и сильный снег — больше.
+ * Если известна интенсивность осадков (мм/ч), она точнее кода.
+ * @param {number} code @param {number | null} [mmPerHour]
+ */
+export function wmoIntensity(code, mmPerHour = null) {
+  if (mmPerHour != null && mmPerHour > 0) return Math.max(.25, Math.min(1.5, .25 + Math.sqrt(mmPerHour) * .45));
+  /** @type {Record<number, number>} */
+  const table = { 51: .3, 53: .4, 55: .5, 56: .35, 57: .5, 61: .55, 63: 1, 65: 1.4, 66: .6, 67: 1.2,
+    71: .5, 73: 1, 75: 1.4, 77: .4, 80: .7, 81: 1.1, 82: 1.5, 85: .8, 86: 1.3, 95: 1.3, 96: 1.4, 99: 1.5 };
+  return table[code] ?? 1;
 }

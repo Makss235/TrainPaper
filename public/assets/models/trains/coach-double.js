@@ -1,3 +1,4 @@
+// @ts-check
 // Двухэтажный вагон ФПК — примитивы: высокий кузов, два ряда окон, красная дверь, маршрутная табличка.
 // Детальная версия — examples/trains/coach-double.js.
 import { bogie, ends, plateSlots, windows } from "./_parts.js";

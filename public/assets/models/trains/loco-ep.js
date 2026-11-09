@@ -1,3 +1,4 @@
+// @ts-check
 // Пассажирский электровоз — примитивы: красный кузов, светлая полоса, тёмный низ, кабина с лобовым
 // стеклом у переднего торца (z = length), пантографы на крыше. Детальная версия — examples/trains/loco-ep.js.
 import { bogie } from "./_parts.js";
@@ -33,7 +34,7 @@ export default {
     bogie(kit, g, L - 4.2, { wheelbase: 2.9 });
     // пантографы: передний поднят к контактному проводу (6 м над рельсом)
     const lines = kit.lines(), top = TOP + .5;
-    for (const [zc, raised] of [[6.2, false], [13.4, true]]) {
+    for (const [zc, raised] of /** @type {[number, boolean][]} */ ([[6.2, false], [13.4, true]])) {
       const h = raised ? 5.98 : top + .45;
       lines.add([-.6, top + .22, zc - .6], [.6, top + .22, zc - .6], .06, "steel");
       lines.add([-.6, top + .22, zc + .6], [.6, top + .22, zc + .6], .06, "steel");

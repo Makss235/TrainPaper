@@ -1,3 +1,4 @@
+// @ts-check
 // Настройки обоев: станция, какие поезда показывать, время суток, погода и сцена «Платформы».
 // Хранятся в браузере, параметры адреса (?station=1146&tod=night&weather=rain) важнее сохранённых.
 // Вид «Вагон» погоду и сцену не использует — они просто хранятся.
@@ -6,11 +7,11 @@ const KEY = "trainpaper:settings";
 const DEFAULTS = { station: 428, filter: "all", suburban: false, tod: "auto", weather: "partly", scene: "auto" };
 const TOD = ["auto", "dawn", "day", "dusk", "night", "cycle"];
 const FILTERS = ["all", "arrivals", "departures"];
-const WEATHER = ["clear", "partly", "cloudy", "overcast", "rain", "snow", "fog"];
+const WEATHER = ["auto", "clear", "partly", "cloudy", "overcast", "rain", "snow", "fog"];   // auto — настоящая погода станции
 
 function read() {
   try {
-    return JSON.parse(localStorage.getItem(KEY)) || {};
+    return JSON.parse(localStorage.getItem(KEY) || "null") || {};
   } catch {
     return {};
   }
@@ -43,7 +44,7 @@ export function update(patch) {
     localStorage.setItem(KEY, JSON.stringify(current));
   } catch { /* приватный режим — ничего страшного */ }
   if (params.has("station") && "station" in patch) {         // чтобы обновление страницы не вернуло старую станцию
-    params.set("station", current.station);
+    params.set("station", String(current.station));
     history.replaceState(null, "", `${location.pathname}?${params}`);
   }
   listeners.forEach(fn => fn(current, patch));

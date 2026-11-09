@@ -21,9 +21,13 @@
 
     { "name": "Земля", "position": [0, -0.32, 0], "components": [{ "type": "Model", "model": "environment/ground", "castShadow": false }] },
 
-    // путь у платформы: вид (модель) + логика (RailTrack — сюда встают поезда)
+    // путь у платформы: вид (модель) + ось пути (Track — по ней ходят поезда; модель получает ось сама).
+    // Кривая за станцией: "points": [[0, 0, 300], [0, 0, -400], [-60, 0, -900], [-200, 0, -3000]], "radius": 800
     { "name": "Путь 1", "position": [4.42, 0, 0],
-      "components": [{ "type": "Model", "model": "station/track" }, { "type": "RailTrack", "platform": { "top": 1.1, "edge": 2.5 } }] },
+      "components": [{ "type": "Model", "model": "station/track" }, { "type": "Track", "points": [[0, 0, 300], [0, 0, -3000]], "visible": [260, 1300] }] },
+    // точка остановки: поезд встаёт хвостом в 7,2 м от камеры; платформа — слева от пути, если смотреть к горизонту
+    { "name": "Платформа 1", "position": [4.42, 0, -7.2],
+      "components": [{ "type": "StopPoint", "track": "Путь 1", "align": "tail", "platform": { "top": 1.1, "edge": 1.92, "side": "left" } }] },
     { "name": "Контактная сеть", "position": [7.06, 0, -30],
       "components": [{ "type": "Model", "model": "station/catenary", "params": { "tracks": [-2.64], "count": 14 } }] },
 
@@ -38,9 +42,12 @@
     // простая коробка:
     // { "name": "Киоск", "position": [-3, 1.1, -30], "components": [{ "type": "Primitive", "size": [2, 2.5, 3], "pivot": "bottom", "color": "wall" }] },
 
+    // движение: менеджер поездов, расписание и поезд с табло РЖД как источник расписания (docs/rail.md)
     { "name": "Движение", "components": [
-      { "type": "TrainTraffic", "role": "board", "track": "Путь 1",
-        "arrival": { "heading": 1, "stop": { "far": -7.2 } }, "departure": { "heading": 1, "stop": { "far": -7.2 } } }
+      { "type": "TrainManager" },
+      { "type": "Schedule" },
+      { "type": "RzdBoard", "track": "Путь 1",
+        "arrival": { "stop": "Платформа 1", "direction": -1 }, "departure": { "stop": "Платформа 1", "direction": -1 } }
     ] }
   ]
 }

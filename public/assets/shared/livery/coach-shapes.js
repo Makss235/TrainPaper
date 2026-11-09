@@ -1,3 +1,5 @@
+// @ts-check
+// Общий модуль (assets/shared/): фигуры ливреи вагона — для детальных моделей и вида «Вагон».
 // Пассажирский вагон ФПК (РЖД) в фирменной ливрее — вид сбоку, по официальной схеме окраски
 // («некотловая сторона»): светло-серый кузов, тонкая бордовая линия над тёмно-серым гофрированным
 // низом; у одного торца — огромный логотип «РЖД», ножкой буквы «Р» служит красная дверь тамбура;
@@ -8,7 +10,7 @@
 // Единица — высота боковины от низа юбки до карниза крыши. Схема в масштабе: длина 7,92 единицы,
 // то есть при длине кузова 25,5 м единица ≈ 3,22 м. Все размеры ниже сняты со схемы.
 
-import { rect, roundPoly, roundRect, stadium } from "./geom.js";
+import { rect, roundPoly, roundRect, stadium } from "../geom.js";
 
 export const H_M = 3.22;                      // метров в единице
 export const CAR_L = 25.5 / H_M;              // длина кузова (7,92)
@@ -36,6 +38,7 @@ const STRIPE_SLOPE = .71;                     // du/dv косой полосы
  * Простые фигуры: {cls, pts} или {cls, line, w}; особые: kind = logo | window | doorWindow | text | tail.
  * rear — последний вагон поезда: на нём табличка в окне, закрытый переход и хвостовые огни.
  */
+/** @returns {any[]} */
 export function coachShapes({ L = CAR_L, rear = false, index = 0 } = {}) {
   const S = [];
   const stripe = v => 7.1 + STRIPE_SLOPE * (v - .2);         // правая кромка красной полосы
@@ -100,6 +103,7 @@ export function coachShapes({ L = CAR_L, rear = false, index = 0 } = {}) {
 
 /** Гармошка перехода между вагонами (u0 — конец переднего кузова, u1 — начало следующего). */
 export function bellowsShapes(u0, u1) {
+  /** @type {any[]} */
   const S = [{ cls: "f-bellows", pts: rect(u0, .05, u1, .9) }];
   for (let u = u0 + .018; u < u1; u += .03) S.push({ cls: "s-fold-v", line: [[u, .06], [u, .89]], w: .008 });
   S.push({ cls: "f-under", pts: rect(u0, -.14, u1, -.06) });

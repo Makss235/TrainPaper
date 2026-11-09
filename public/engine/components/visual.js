@@ -186,7 +186,7 @@ export class Line extends VisualComponent {
     placeHolder(this.holder, { offset: p.offset });
     const pts = p.closed && p.points.length > 2 ? [...p.points, p.points[0]] : p.points;
     if (pts.length < 2) return;
-    const lines = new LineBatch();
+    const lines = new LineBatch(this.engine.palette);
     for (let i = 1; i < pts.length; i++) {
       const a = pts[i - 1], b = pts[i];
       if (!p.sag) { lines.add(a, b, p.width, p.color); continue; }
@@ -211,13 +211,47 @@ export class Glow extends VisualComponent {
     color: { type: "color", default: "#ffe9c0", doc: "Цвет" },
     intensity: { type: "number", default: 1, min: 0, doc: "Яркость" },
     night: { type: "boolean", default: true, doc: "Горит только ночью (и в сумрачную погоду)" },
+    light: { type: "string", default: "", doc: "id компонента Light на этом объекте: ореол повторяет его состояние и яркость" },
     offset: VISUAL_PROPS.offset,
   };
 
+  /** @type {number | undefined} яркость источника при связке (масштаб для ореола) */
+  base = undefined;
+  /** @type {number | undefined} */
+  k = undefined;
+  /** @type {boolean | undefined} */
+  night = undefined;
+
+  start() {
+    if (!this.props.light) return;
+    // источник меняется (включили, гаснет, яркость) — ореол за ним
+    this.on("lightChanged", (/** @type {any} */ l) => { if (l?.key === this.props.light) this.#follow(); });
+    this.#follow();
+  }
+
+  /** Связанный источник света. @returns {any} */
+  get source() {
+    const id = this.props.light;
+    return id ? this.gameObject.components.find(c => c.type === "Light" && c.key === id) ?? null : null;
+  }
+
+  #follow() {
+    const l = this.source;
+    const k = !l || !l.activeAndEnabled ? 0 : (l.props.mode === "manual" && !l.props.on ? 0 : l.level) * (l.props.intensity / (this.base ??= l.props.intensity || 1));
+    const night = l ? l.props.mode === "night" : this.props.night;
+    if (k === this.k && night === this.night) return;
+    this.k = k;
+    this.night = night;
+    this.clear();
+    this.rebuild();
+    this.invalidate("scene");
+  }
+
   rebuild() {
     const p = this.props;
-    const glows = new GlowBatch();
-    glows.add(p.offset, p.radius, p.color, { night: p.night, intensity: p.intensity });
+    const k = p.light ? this.k ?? 1 : 1, night = p.light ? this.night ?? p.night : p.night;
+    const glows = new GlowBatch(this.engine.palette);
+    glows.add(p.offset, p.radius, p.color, { night, intensity: p.intensity * k });
     this.holder.add(glows.build(this.engine.materials));
   }
 }

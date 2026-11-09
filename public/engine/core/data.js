@@ -51,7 +51,7 @@ export function loadData(url) {
       }
     }).catch(error => { cache.delete(url); throw error; }));
   }
-  return cache.get(url);
+  return /** @type {Promise<any>} */ (cache.get(url));
 }
 
 /** @param {any} v @returns {v is Record<string, any>} */

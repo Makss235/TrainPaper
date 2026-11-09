@@ -1,0 +1,9 @@
+// Скрипты проекта — пользовательские компоненты. Подключаются по соглашению, как модели:
+// { "type": "examples/blink" } в сцене → файл assets/scripts/examples/blink.js (export default class extends Script).
+// Здесь можно дать короткие имена (замены) — необязательно. Как писать скрипты — docs/scripts.md.
+{
+  "aliases": {
+    "blink": "examples/blink.js",
+    "random-traffic": "rail/random-traffic.js"
+  }
+}

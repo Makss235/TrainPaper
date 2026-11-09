@@ -1,3 +1,4 @@
+// @ts-check
 // Детальный пассажирский электровоз.
 import { locoEp } from "./_loco.js";
 

@@ -6,14 +6,14 @@
 //    «зерно» частицы × размер объёма + накопленное смещение (падение и ветер), свёрнутое в объём.
 //    Смещение копится по кадрам (offset += скорость × dt) — смена ветра меняет скорость, а не
 //    сдвигает весь дождь разом (раньше из-за «скорость × всё время» осадки съезжали вбок);
-//  - под крышей осадков нет: сверху рисуется карта высот поверхностей (крыши, навесы, вагоны, пол) —
+//  - под крышей осадков нет: сверху рисуется карта высот поверхностей (крыши, навесы, кузова, пол) —
 //    капля исчезает, долетев до первой поверхности под собой, там же появляются брызги;
 //  - частицы рисуются отдельным лёгким проходом в свой буфер с проверкой по глубине уже готовой
 //    сцены: сама сцена при этом не перерисовывается, пока идёт дождь;
 //  - плотность меняется постепенно: каждая частица видна, если её случайный порог ниже плотности —
 //    при смене погоды капли появляются и исчезают на своих местах.
 // Поверхности для карты высот — меши на слое SURFACE_LAYER (их помечают компоненты внешнего вида).
-// @ts-nocheck
+// @ts-check
 import * as THREE from "three";
 import { COMMON, LIGHTING } from "../render/shaders.js";
 
@@ -28,10 +28,12 @@ export function markSurfaces(object, on = true) {
   return object;
 }
 
+// Сила осадков 1 (пресет «Дождь») показывает 1/HEAVY частиц: запас — для ливня и метели (сила до HEAVY).
+const HEAVY = 1.5;
 const SETTINGS = {
-  rain: { count: 9000, radius: 22, height: 18, speed: 9.2, length: .035, width: .005, alpha: .55 },
-  snow: { count: 14000, radius: 18, height: 14, speed: 1.15, size: .03, alpha: .95 },
-  splash: { count: 900, size: .1 },
+  rain: { count: 13500, radius: 22, height: 18, speed: 9.2, length: .035, width: .005, alpha: .55 },
+  snow: { count: 21000, radius: 18, height: 14, speed: 1.15, size: .03, alpha: .95 },
+  splash: { count: 1350, size: .1 },
   map: { size: 512, extent: 120, ahead: 35 },   // карта высот: пикселей и метров по стороне; центр — на ahead м впереди камеры
 };
 
@@ -331,9 +333,9 @@ export class Precipitation {
     this.rain = weather.rain;
     this.snow = weather.snow;
     this.wind = weather.wind;
-    this.rainMat.uniforms.uDensity.value = weather.rain;
-    this.splashMat.uniforms.uDensity.value = weather.rain * .9;
-    this.snowMat.uniforms.uDensity.value = weather.snow;
+    this.rainMat.uniforms.uDensity.value = Math.min(1, weather.rain / HEAVY);
+    this.splashMat.uniforms.uDensity.value = Math.min(1, weather.rain * .9 / HEAVY);
+    this.snowMat.uniforms.uDensity.value = Math.min(1, weather.snow / HEAVY);
     const g = .3 + .7 * colorK;
     this.rainMat.uniforms.uColor.value.set(.62 * g + .08, .66 * g + .08, .72 * g + .1);
     this.splashMat.uniforms.uColor.value.set(.7 * g + .1, .73 * g + .1, .78 * g + .1);
@@ -343,7 +345,7 @@ export class Precipitation {
     this.snowMesh.visible = weather.snow > .002;
   }
 
-  /** Сцена изменилась (поезд проехал, объект подвинули) — перерисовать карту высот. */
+  /** Сцена изменилась (объект проехал или его подвинули) — перерисовать карту высот. */
   markDirty() {
     this.heightDirty = true;
   }

@@ -1,3 +1,4 @@
+// @ts-check
 // Крытый грузовой вагон — примитивы: коробка с рёбрами (узор, без ряби вдали), крыша, двери.
 import { FREIGHT_BOTTOM, freightFrame, ribs } from "./_freight.js";
 

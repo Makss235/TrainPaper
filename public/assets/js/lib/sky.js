@@ -1,3 +1,4 @@
+// @ts-check
 import { clamp, hex, mix } from "./color.js";
 
 // высота солнца (°) → цвет неба в зените и у горизонта

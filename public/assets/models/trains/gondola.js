@@ -1,3 +1,4 @@
+// @ts-check
 // Полувагон — примитивы: открытый кузов из четырёх стенок с рёбрами.
 import { FREIGHT_BOTTOM, freightFrame, ribs } from "./_freight.js";
 

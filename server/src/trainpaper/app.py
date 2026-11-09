@@ -5,6 +5,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from .rzd import RzdError
+from .weather import WeatherError
 
 # Типы задаём явно: на Windows mimetypes берёт их из реестра, и там .js бывает
 # text/plain — браузер с таким типом не загружает ES-модули.
@@ -29,8 +30,9 @@ MIME_TYPES = {
 class Handler(SimpleHTTPRequestHandler):
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, **MIME_TYPES}
 
-    def __init__(self, *args, service, public_dir: Path, **kwargs):
+    def __init__(self, *args, service, public_dir: Path, weather=None, **kwargs):
         self.service = service
+        self.weather = weather
         self.public_dir = public_dir
         super().__init__(*args, directory=str(public_dir), **kwargs)
 
@@ -58,6 +60,19 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json({"stations": self.service.stations(query.get("q", [""])[0])})
             except RzdError as error:
                 return self.send_json({"error": str(error), "stations": []}, 502)
+
+        if parts.path == "/api/weather":
+            if not self.weather:
+                return self.send_json({"error": "Погода не подключена"}, 404)
+            try:
+                lat = float(query.get("lat", [""])[0])
+                lon = float(query.get("lon", [""])[0])
+            except ValueError:
+                return self.send_json({"error": "Нужны координаты: /api/weather?lat=59.93&lon=30.36"}, 400)
+            try:
+                return self.send_json(self.weather.current(lat, lon))
+            except WeatherError as error:
+                return self.send_json({"error": str(error)}, 502)
 
         if parts.path.startswith("/api/"):
             return self.send_json({"error": "Нет такого метода"}, 404)
@@ -95,6 +110,6 @@ class Handler(SimpleHTTPRequestHandler):
         super().end_headers()
 
 
-def make_server(host: str, port: int, service, public_dir: Path) -> ThreadingHTTPServer:
-    handler = partial(Handler, service=service, public_dir=Path(public_dir).resolve())
+def make_server(host: str, port: int, service, public_dir: Path, weather=None) -> ThreadingHTTPServer:
+    handler = partial(Handler, service=service, public_dir=Path(public_dir).resolve(), weather=weather)
     return ThreadingHTTPServer((host, port), handler)

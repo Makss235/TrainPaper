@@ -22,22 +22,28 @@ import { Environment, WeatherController } from "../environment/environment.js";
 import { Precipitation } from "../environment/precipitation.js";
 import { SkyLayer } from "../environment/sky.js";
 import { Composite } from "../render/composite.js";
+import { defaultEffects } from "../render/effects/index.js";
+import { PostStack } from "../render/post.js";
 import { createLightUniforms } from "../render/lighting.js";
 import { Materials } from "../render/materials.js";
-import { definePalette } from "../render/palette.js";
+import { Palette, registerPalette } from "../render/palette.js";
 import { SunShadow } from "../render/shadows.js";
 import { DEFAULT_QUALITY, DEFAULT_STYLE, mergeDeep } from "../render/style.js";
 import { CameraSystem } from "../systems/cameras.js";
 import { LightSystem } from "../systems/lights.js";
 import { loadData } from "./data.js";
+import { Emitter } from "./events.js";
 import { Loop } from "./loop.js";
+import { Scheduler } from "./scheduler.js";
+import { isCancelled, SimClock } from "./time.js";
 import { Scene } from "./scene.js";
 
-class Events {
-  constructor() { this.map = new Map(); }
-  on(name, fn) { if (!this.map.has(name)) this.map.set(name, new Set()); this.map.get(name).add(fn); return () => this.off(name, fn); }
-  off(name, fn) { this.map.get(name)?.delete(fn); }
-  emit(name, ...args) { for (const fn of this.map.get(name) || []) { try { fn(...args); } catch (e) { console.error(e); } } }
+// промисы wait()/tween() удалённых компонентов отклоняются CancelledError — это не ошибка
+let rejectionHook = false;
+function ignoreCancelled() {
+  if (rejectionHook || typeof addEventListener !== "function") return;
+  rejectionHook = true;
+  addEventListener("unhandledrejection", e => { if (isCancelled(e.reason)) e.preventDefault(); });
 }
 
 /**
@@ -46,7 +52,7 @@ class Events {
  * @property {HTMLCanvasElement} [canvas] или готовый холст
  * @property {Partial<typeof DEFAULT_QUALITY>} [quality]  качество и нагрузка
  * @property {any} [style]               стиль: свет, дымка, фильтры (render/style.js)
- * @property {{models?: string, prefabs?: string, manifest?: string|null}} [paths]  где лежат модели и префабы
+ * @property {{assets?: string, models?: string, prefabs?: string, scripts?: string, manifest?: string|null, scriptsManifest?: string|null}} [paths]  где лежат модели, префабы, скрипты; assets — корень для путей в данных (картинки, расписания)
  * @property {Record<string, string>} [palette]  именованные цвета
  * @property {boolean} [pointer]         камера поворачивается за курсором (по умолчанию да)
  * @property {boolean} [animate]         анимации (false — для скриншотов: всё сразу, без движения)
@@ -59,8 +65,11 @@ export class Engine {
     this.options = options;
     this.quality = { ...DEFAULT_QUALITY, ...(options.quality || {}) };
     this.style = mergeDeep(DEFAULT_STYLE, options.style);
-    if (options.palette) definePalette(options.palette);
-    this.events = new Events();
+    /** Именованные цвета этого движка (render/palette.js) */
+    this.palette = new Palette(options.palette);
+    registerPalette(this.palette);
+    this.events = new Emitter();
+    ignoreCancelled();
     // цвета сцены уже «экранные» (sRGB): three.js не должен их пересчитывать
     THREE.ColorManagement.enabled = false;
 
@@ -86,7 +95,7 @@ export class Engine {
     this.camera = new THREE.PerspectiveCamera(50, 1, .3, 6000);
     this.screen = { uRes: { value: new THREE.Vector2(1, 1) }, uMinPx: { value: 1 } };
     this.light = createLightUniforms(this.style);
-    this.materials = new Materials(this.light, this.screen);
+    this.materials = new Materials(this.light, this.screen, this.palette, { maxLights: Math.max(1, Math.min(256, this.quality.maxLights)) });
 
     const depth = new THREE.DepthTexture(1, 1, THREE.UnsignedIntType);
     this.sceneTarget = new THREE.WebGLRenderTarget(1, 1, { samples: webgl2 ? Q.msaa : 0, depthBuffer: true, depthTexture: depth });
@@ -94,9 +103,17 @@ export class Engine {
     this.fxTarget = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
     this.sky = new SkyLayer();
     this.composite = new Composite(this.style);
+    /** Пост-обработка: стек эффектов сборки кадра (render/post.js) */
+    this.post = new PostStack(this);
+    this.composite.setStack(this.post);
     this.shadow = new SunShadow(this.renderer, this.light, Math.min(Q.shadowSize, this.renderer.capabilities.maxTextureSize));
 
     this.loop = new Loop(layers => this.render(layers), { maxFps: Q.maxFps });
+    this.post.setBase(defaultEffects(this.style.filters));
+    /** Часы симуляции: время суток, расписание, таймеры скриптов (core/time.js) */
+    this.time = new SimClock();
+    /** update() компонентов и tween() (core/scheduler.js) */
+    this.scheduler = new Scheduler(this.loop, this.time, { instant: () => options.animate === false });
     this.assets = new AssetManager(this, options.paths);
     this.scene = new Scene(this);
     this.three.add(this.scene.object3D);
@@ -122,8 +139,18 @@ export class Engine {
     this.environment.update(true);
   }
 
-  /** Подписка на события: "sceneLoaded", "environment", "cameraChanged", "frame". */
+  /**
+   * Подписка на события движка: "sceneLoaded", "environment", "cameraChanged", "frame", "contextRestored"
+   * и события приложения (engine.events.emit). Возвращает отписку.
+   * @param {string} name @param {(...args: any[]) => void} fn
+   */
   on(name, fn) { return this.events.on(name, fn); }
+
+  /**
+   * Плавный переход по реальному времени (камера, погода, интерфейс). Для поведения объектов — Component.tween().
+   * @param {import("./scheduler.js").TweenOptions} o
+   */
+  tween(o) { return this.scheduler.tween({ realTime: true, ...o }); }
 
   /** Перерисовать слои: "scene", "sky", "shadow", "fx", "composite". */
   invalidate(...layers) {
@@ -141,6 +168,7 @@ export class Engine {
     this.cameras.active = null;
     await this.scene.load(data);
     this.environment.configure(this.scene.settings);
+    this.post.applyScene(data.post || []);
     this.cameras.update(0);
     this.lights.markDirty();
     this.invalidate("scene", "sky", "shadow");
@@ -159,11 +187,11 @@ export class Engine {
    */
   async instantiate(data, parent) {
     const od = typeof data === "string" ? { prefab: data } : data;
-    const [resolved] = await this.scene.resolve([od]);
-    const tmp = this.scene;
-    const go = tmp.instantiate(resolved);
-    (parent || this.scene.root).add(go);
-    return go;
+    const list = await this.scene.resolve([od]);
+    await this.scene.preload(list);                       // скрипты и модели — до создания (instantiate синхронный)
+    const gos = list.map(o => this.scene.instantiate(o));
+    for (const go of gos) (parent || this.scene.root).add(go);
+    return gos[0];
   }
 
   resize() {
@@ -189,8 +217,10 @@ export class Engine {
     const r = this.renderer;
     r.info.reset();
     this.lights.update();
+    const spots = this.lights.shadowsDirty;
     if (layers.has("shadow")) this.shadow.render(this.three);
-    const sceneChanged = layers.has("scene") || layers.has("shadow");
+    if (layers.has("shadow") || spots) this.lights.renderShadows(this.three);
+    const sceneChanged = layers.has("scene") || layers.has("shadow") || spots;
     if (sceneChanged) {
       r.setRenderTarget(this.sceneTarget);
       r.setClearColor(0x000000, 0);
@@ -202,6 +232,8 @@ export class Engine {
     if (fx && (layers.has("fx") || sceneChanged)) {
       this.precipitation.render(r, this.fxTarget, this.sceneTarget.depthTexture, this.camera, this.three);
     }
+    this.post.prepare({ renderer: r, scene: this.sceneTarget.texture, depth: this.sceneTarget.depthTexture, camera: this.camera,
+      width: this.sceneTarget.width, height: this.sceneTarget.height, sceneChanged: sceneChanged || layers.has("fx") });
     this.composite.render(r, this.skyTarget.texture, this.sceneTarget.texture, fx ? this.fxTarget.texture : null,
       this.camera, this.sceneTarget.width, this.sceneTarget.height);
     for (const fn of this.afterRender) fn(layers);
@@ -217,7 +249,7 @@ export class Engine {
     const v = new THREE.Vector3(p[0], p[1], p[2]).applyMatrix4(this.camera.matrixWorldInverse);
     if (v.z > -this.camera.near) return null;
     v.applyMatrix4(this.camera.projectionMatrix);
-    return [(v.x + 1) / 2 * this.width, (1 - v.y) / 2 * this.height];
+    return [(v.x + 1) / 2 * (this.width ?? 1), (1 - v.y) / 2 * (this.height ?? 1)];
   }
 
   /** Остановить и освободить всё (холст остаётся в DOM, если передан снаружи). */
@@ -225,9 +257,12 @@ export class Engine {
     removeEventListener("resize", this.onResize);
     if (this.onPointer) removeEventListener("pointermove", this.onPointer);
     for (const k of [...this.loop.anims.keys()]) this.loop.stop(k);
+    this.time.clearTimers();
     this.scene.clear();
     this.precipitation.dispose();
     this.shadow.dispose();
+    this.lights.dispose();
+    this.post.clear();
     for (const t of [this.sceneTarget, this.skyTarget, this.fxTarget]) t.dispose();
     this.renderer.dispose();
     if (!this.options.canvas) this.canvas.remove();

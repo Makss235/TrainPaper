@@ -12,6 +12,7 @@
 // @ts-check
 import * as THREE from "three";
 import { Component, getComponentClass } from "./component.js";
+import { Emitter } from "./events.js";
 
 const DEG = Math.PI / 180;
 
@@ -40,6 +41,48 @@ export class GameObject {
     this.source = null;
     this.awoken = false;
     this.started = false;
+    this.destroyed = false;
+    /** @type {Emitter | null} */
+    this._events = null;
+  }
+
+  // ---------- события ----------
+
+  /**
+   * Подписаться на событие объекта. Возвращает отписку.
+   * @param {string} name @param {(data: any, source: GameObject) => void} fn
+   */
+  on(name, fn) { return (this._events ||= new Emitter()).on(name, fn); }
+
+  /** @param {string} name @param {(data: any, source: GameObject) => void} fn */
+  off(name, fn) { this._events?.off(name, fn); }
+
+  /**
+   * Событие объекта. bubble — то же событие получают родители (вплоть до корня сцены).
+   * @param {string} name @param {any} [data] @param {{bubble?: boolean}} [o]
+   */
+  emit(name, data, { bubble = false } = {}) {
+    /** @type {GameObject | null} */
+    let o = this;
+    while (o) {
+      o._events?.emit(name, data, this);
+      if (!bubble) break;
+      o = o.parent;
+    }
+  }
+
+  /**
+   * Вызвать метод у всех компонентов объекта, у которых он есть (как SendMessage в Unity).
+   * Возвращает число вызванных.
+   * @param {string} method @param {...any} args
+   */
+  send(method, ...args) {
+    let n = 0;
+    for (const c of [...this.components]) {
+      const f = /** @type {any} */ (c)[method];
+      if (typeof f === "function") { n++; f.apply(c, args); }
+    }
+    return n;
   }
 
   // ---------- трансформ ----------
@@ -86,7 +129,7 @@ export class GameObject {
     const comp = /** @type {T} */ (new C(this, props));
     this.components.push(comp);
     // объект уже в живой сцене — сразу запускаем
-    if (this.awoken) { comp.awake(); if (this.started) comp.start(); }
+    if (this.awoken) { comp.awake(); if (this.started) comp._start(); }
     return comp;
   }
 
@@ -97,20 +140,70 @@ export class GameObject {
    * @returns {T | undefined}
    */
   getComponent(type) {
-    return /** @type {T | undefined} */ (this.components.find(c => (typeof type === "string" ? c.type === type : c instanceof type)));
+    return /** @type {T | undefined} */ (this.components.find(c => isType(c, type)));
   }
 
-  /** @param {string | Function} type */
+  /**
+   * Все компоненты типа.
+   * @template {Component} T
+   * @param {string | (new (...a: any[]) => T)} type
+   * @returns {T[]}
+   */
   getComponents(type) {
-    return this.components.filter(c => (typeof type === "string" ? c.type === type : c instanceof /** @type {any} */ (type)));
+    return /** @type {T[]} */ (this.components.filter(c => isType(c, type)));
+  }
+
+  /**
+   * Компонент на этом объекте или ближайшем родителе.
+   * @template {Component} T
+   * @param {string | (new (...a: any[]) => T)} type
+   * @returns {T | undefined}
+   */
+  getComponentInParent(type) {
+    /** @type {GameObject | null} */
+    let o = this;
+    while (o) {
+      const c = o.getComponent(type);
+      if (c) return c;
+      o = o.parent;
+    }
+    return undefined;
+  }
+
+  /**
+   * Компонент на этом объекте или в потомках (обход в глубину).
+   * @template {Component} T
+   * @param {string | (new (...a: any[]) => T)} type
+   * @returns {T | undefined}
+   */
+  getComponentInChildren(type) {
+    const own = this.getComponent(type);
+    if (own) return own;
+    for (const ch of this.children) {
+      const c = ch.getComponentInChildren(type);
+      if (c) return c;
+    }
+    return undefined;
+  }
+
+  /**
+   * Все компоненты типа на этом объекте и в потомках.
+   * @template {Component} T
+   * @param {string | (new (...a: any[]) => T)} type
+   * @returns {T[]}
+   */
+  getComponentsInChildren(type) {
+    /** @type {T[]} */
+    const out = [];
+    this.traverse(o => out.push(...o.getComponents(type)));
+    return out;
   }
 
   /** @param {Component} comp */
   removeComponent(comp) {
     const i = this.components.indexOf(comp);
     if (i < 0) return;
-    comp.stopAnimation();
-    comp.onDestroy();
+    comp._destroy();
     this.components.splice(i, 1);
     this.engine?.invalidate("scene", "shadow");
   }
@@ -152,8 +245,8 @@ export class GameObject {
   start() {
     if (this.started) return;
     this.started = true;
-    for (const c of [...this.components]) c.start();
-    for (const ch of this.children) ch.start();
+    for (const c of [...this.components]) c._start();
+    for (const ch of [...this.children]) ch.start();
     if (!this.active) for (const c of this.components) c.onDisable();
   }
 
@@ -167,18 +260,31 @@ export class GameObject {
 
   /** Включить/выключить объект: выключенный не виден и его компоненты не работают. @param {boolean} on */
   setActive(on) {
+    on = !!on;
     if (this.active === on) return;
+    const parentActive = !this.parent || this.parent.activeInHierarchy;
     this.active = on;
     this.object3D.visible = on;
-    for (const c of this.components) (on ? c.onEnable() : c.onDisable());
+    // onEnable/onDisable и сон update — у всех компонентов, чья активность в иерархии поменялась
+    if (parentActive && this.started) this.#activeChanged(on);
     this.engine?.invalidate("scene", "shadow");
+  }
+
+  /** @param {boolean} on */
+  #activeChanged(on) {
+    for (const c of [...this.components]) if (c.enabled && c.started) c._activeChanged(on);
+    for (const ch of this.children) if (ch.active) ch.#activeChanged(on);
   }
 
   /** Удалить объект со всеми детьми и компонентами. */
   destroy() {
+    if (this.destroyed) return;
+    this.destroyed = true;
     for (const ch of [...this.children]) ch.destroy();
-    for (const c of this.components) { c.stopAnimation(); c.onDestroy(); }
+    for (const c of this.components) c._destroy();
     this.components = [];
+    this._events?.emit("destroyed", null, this);
+    this._events = null;
     this.parent?.removeChild(this);
     this.object3D.removeFromParent();
     this.engine?.invalidate("scene", "shadow");
@@ -223,4 +329,9 @@ export class GameObject {
     if (this.children.length) out.children = this.children.map(c => c.toJSON());
     return out;
   }
+}
+
+/** @param {Component} c @param {string | Function} type */
+function isType(c, type) {
+  return typeof type === "string" ? c.type === type : c instanceof /** @type {any} */ (type);
 }

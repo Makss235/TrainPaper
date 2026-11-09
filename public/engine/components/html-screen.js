@@ -69,6 +69,7 @@ export class HtmlScreen extends Component {
     const [w, h] = this.props.size, pw = this.props.pixelWidth, ph = Math.round(pw * h / w);
     if (el.style.height !== `${ph}px`) { el.style.width = `${pw}px`; el.style.height = `${ph}px`; }
     el.style.display = "";
-    el.style.transform = homography(pw, ph, pts[0], pts[1], pts[2], pts[3]);
+    const q = /** @type {[number, number][]} */ (pts);
+    el.style.transform = homography(pw, ph, q[0], q[1], q[2], q[3]);
   }
 }

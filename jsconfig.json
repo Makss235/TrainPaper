@@ -10,9 +10,11 @@
     "checkJs": false,
     "allowJs": true,
     "noEmit": true,
-    "strict": false,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+    "strict": true,
+    "noImplicitAny": false,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "useUnknownInCatchVariables": false
   },
-  "include": ["public/engine/**/*.js", "public/assets/**/*.js", "types/**/*.d.ts"],
+  "include": ["public/engine/**/*.js", "public/engine/**/*.d.ts", "public/assets/**/*.js", "tools/**/*.js", "types/**/*.d.ts"],
   "exclude": ["public/assets/vendor/**", "server/**"]
 }

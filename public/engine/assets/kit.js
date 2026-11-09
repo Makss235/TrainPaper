@@ -9,12 +9,11 @@
 //     const lines = kit.lines(); lines.add([0, 5, 0], [1, 5, 0], 0.03, "steel"); g.add(lines.build());
 //     return g;
 //   }
-// @ts-nocheck
+// @ts-check
 import * as THREE from "three";
 import * as geometry from "../render/geometry.js";
 import { GlowBatch } from "../render/glows.js";
 import { LineBatch } from "../render/lines.js";
-import { rgb } from "../render/palette.js";
 import { rng } from "../core/data.js";
 
 const DEG = Math.PI / 180;
@@ -63,7 +62,11 @@ export function createKit(engine) {
     return m;
   }
   return {
-    THREE, engine, geometry, rgb, rng,
+    THREE, engine, geometry, rng,
+    /** Цвет из палитры этого движка → [r, g, b] (0…1). */
+    rgb: (/** @type {string | number[]} */ c) => engine.palette.rgb(c),
+    /** Склейка деталей с цветом у вершин (geometry.Batch) с палитрой этого движка. */
+    batch: () => new geometry.Batch(engine.palette),
     /** Материал (cel) из кэша движка. */
     material: opts => engine.materials.toon(opts),
     group: (...children) => { const g = new THREE.Group(); if (children.length) g.add(...children); return g; },
@@ -88,9 +91,9 @@ export function createKit(engine) {
       return m;
     },
     /** Тонкие линии (провода): kit.lines().add(a, b, толщина, цвет) … .build() */
-    lines: () => { const b = new LineBatch(); const build = b.build.bind(b); b.build = () => build(engine.materials); return b; },
+    lines: () => { const b = /** @type {LineBatch & {build: () => any}} */ (new LineBatch(engine.palette)); const build = b.build.bind(b); b.build = () => build(engine.materials); return b; },
     /** Ореолы огней: kit.glows().add(p, радиус, цвет, { night }) … .build() */
-    glows: () => { const b = new GlowBatch(); const build = b.build.bind(b); b.build = () => build(engine.materials); return b; },
+    glows: () => { const b = /** @type {GlowBatch & {build: () => any}} */ (new GlowBatch(engine.palette)); const build = b.build.bind(b); b.build = () => build(engine.materials); return b; },
     /** Меш из своей геометрии. */
     mesh: (geo, o = {}) => new THREE.Mesh(geo, o.mat || engine.materials.toon({ wet: true, ...(o.material || {}), color: o.color ?? "#ffffff" })),
   };

@@ -1,3 +1,4 @@
+// @ts-check
 import { demoBoard } from "./demo.js";
 
 const API = new URL("../../../api/", import.meta.url);

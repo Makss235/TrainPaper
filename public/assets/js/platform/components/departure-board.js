@@ -1,16 +1,26 @@
 // Табло поездов: текст из данных РЖД на экране HtmlScreen того же объекта (элемент #board).
-// Приложение вызывает update() раз в секунду и при смене поезда.
-// @ts-nocheck
+// Какой поезд показать — тот, что сейчас у платформы или подходит к ней: его даёт источник расписания
+// RzdBoard (rail/sources/rzd-board.js) через Schedule и TrainManager. Приложение вызывает refresh() раз
+// в секунду (обратный отсчёт, часы) и при обновлении табло.
+// @ts-check
 import { Component } from "../../../../engine/index.js";
 import { updateBoard } from "../board.js";
 
 export class DepartureBoard extends Component {
   static type = "DepartureBoard";
-  static doc = "Табло поездов РЖД: показывает ближайший поезд, время, путь, опоздание и бегущую строку (на HtmlScreen объекта).";
-  static props = {};
+  static doc = "Табло поездов РЖД: поезд у платформы (из RzdBoard), время, путь, опоздание и бегущая строка (на HtmlScreen объекта).";
+  static props = {
+    source: { type: "component", component: "RzdBoard", default: null, doc: "Источник (по умолчанию — первый RzdBoard в сцене)" },
+  };
 
-  /** @param {number} now @param {any} item @param {any[]} list @param {any} info */
-  update(now, item, list, info) {
-    if (this.gameObject.activeInHierarchy) updateBoard(now, item, list, info);
+  /** Поезд, который сейчас показывает сцена (элемент табло) или null. */
+  get item() {
+    const src = this.props.source ?? this.engine.scene.findComponent("RzdBoard");
+    return /** @type {any} */ (src)?.shown ?? null;
+  }
+
+  /** @param {number} now @param {any[]} list @param {any} info */
+  refresh(now, list, info) {
+    if (this.gameObject.activeInHierarchy) updateBoard(now, this.item, list, info);
   }
 }

@@ -8,7 +8,8 @@
   "scenes": [
     { "id": "typical", "name": "Типовая платформа", "file": "typical.jsonc" },
     { "id": "spb-glavny", "name": "Санкт-Петербург-Главный", "file": "spb-glavny.jsonc" },
-    { "id": "murmansk", "name": "Мурманск", "file": "murmansk.jsonc" }
+    { "id": "murmansk", "name": "Мурманск", "file": "murmansk.jsonc" },
+    { "id": "halt", "name": "Промежуточная станция", "file": "halt.jsonc" }
   ],
   "stations": {
     "428": "spb-glavny",

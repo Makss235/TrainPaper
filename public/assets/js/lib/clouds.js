@@ -1,3 +1,4 @@
+// @ts-check
 // Облака: плоские кучевые с ровным низом, в два тона — освещённая часть смещена к солнцу.
 // Ближе к горизонту облака мельче и бледнее (перспектива), медленно плывут по небу.
 
@@ -38,6 +39,7 @@ function cloudShape(w, random) {
  * Рисует облака в svg. avoid — прямоугольники {x0,y0,x1,y1}, куда облака не ставим (например, под текстом).
  * Возвращает объект для дрейфа и подсветки.
  */
+/** @param {any} svg @param {{W: number, H: number, horizon: number, count?: number, seed?: number, avoid?: {x0: number, y0: number, x1: number, y1: number}[]}} o */
 export function drawClouds(svg, { W, H, horizon, count = 7, seed = 7, avoid = [] }) {
   svg.replaceChildren();
   const random = rng(seed), clouds = [];

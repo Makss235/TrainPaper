@@ -1,8 +1,9 @@
+// @ts-check
 // Небо: градиент по высоте солнца, звёзды, солнце и луна — общее для обоих видов.
 import { clamp, mix, rgba } from "./color.js";
 import { initGrain } from "./grain.js";
 
-const $ = id => document.getElementById(id);
+const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
 export function initStars(count = 110) {
   initGrain();

@@ -1,0 +1,66 @@
+<!doctype html>
+<!--
+  Два движка на одной странице: у каждого своя палитра, свои пресеты погоды и таблица неба —
+  они не влияют друг на друга (состояние — у экземпляра движка, а не у модуля).
+  Открыть: http://localhost:8000/engine/examples/two-engines.html
+-->
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Движок: два экземпляра</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #10141c; font: 14px/1.4 system-ui, sans-serif; color: #fff; }
+    .row { display: flex; height: 100%; }
+    .view { position: relative; flex: 1; overflow: hidden; }
+    .label { position: absolute; z-index: 2; left: 12px; top: 10px; background: rgba(0,0,0,.45); padding: 4px 8px; border-radius: 6px; }
+  </style>
+  <script type="importmap">{ "imports": {
+    "three": "../../assets/vendor/three/three.module.min.js",
+    "three/addons/": "../../assets/vendor/three/addons/"
+  } }</script>
+</head>
+<body>
+  <div class="row">
+    <div class="view" id="a"><div class="label">Движок А: палитра «тёплая», ясно</div></div>
+    <div class="view" id="b"><div class="label">Движок Б: палитра «холодная», своя «метель», северное небо</div></div>
+  </div>
+  <script type="module">
+    import { Engine } from "../index.js";
+
+    // одна и та же сцена: цвета — именами палитры ("stone", "roof")
+    const scene = {
+      environment: { azimuth: 200, shadows: { x: [-15, 15], y: [-1, 8], z: [10, -40] } },
+      objects: [
+        { name: "Камера", position: [0, 2, 8], components: [{ type: "Camera", main: true, target: [0, 1.5, -10], focal: [0.7, 1.1] }] },
+        { name: "Земля", components: [{ type: "Primitive", shape: "plane", size: [400, 0, 400], color: "ground", castShadow: false }] },
+        { name: "Дом", position: [0, 0, -8], components: [{ type: "Primitive", size: [6, 3, 4], pivot: "bottom", color: "stone" }] },
+        { name: "Крыша", position: [0, 3, -8], components: [{ type: "Primitive", size: [6.4, 0.3, 4.4], color: "roof" }] },
+      ],
+    };
+
+    const a = new Engine({ container: document.getElementById("a"), paths: { manifest: null },
+      palette: { stone: "#d9a66b", roof: "#8a3b2a", ground: "#8a9a5b" } });
+    const b = new Engine({ container: document.getElementById("b"), paths: { manifest: null },
+      palette: { stone: "#9fb2c8", roof: "#2f3d52", ground: "#c9d3dc" } });
+
+    // свой пресет погоды — только у движка Б
+    b.weather.define("blizzard", { cover: 1, cloudOpacity: 1, overcast: 1, sun: 0, dark: .25, skyGray: 1, fogNear: .2, fogFar: .25,
+      snow: 1.4, snowCover: 1, lamps: .4, wind: [9, 3] }, "Метель");
+    await Promise.all([a.load(scene), b.load(scene)]);
+    // северное небо — только у движка Б (после загрузки: каждая сцена начинает со своей таблицы или встроенной)
+    b.environment.setSkyTable([[-18, "#03060f", "#08101f"], [-4, "#16264f", "#4b5f86"], [3, "#3c5f94", "#c7b3c4"], [30, "#3d6fae", "#b8cde0"]]);
+    a.weather.set("clear", { instant: true });
+    b.weather.set("blizzard", { instant: true });
+
+    // проверка: состояние не смешалось
+    window.check = () => ({
+      paletteA: a.palette.colors.stone, paletteB: b.palette.colors.stone,
+      weatherA: a.weather.key, weatherB: b.weather.key,
+      blizzardInA: "blizzard" in a.weather.table, blizzardInB: "blizzard" in b.weather.table,
+      skyA: a.environment.skyTable.length, skyB: b.environment.skyTable.length,
+    });
+    window.engines = { a, b };
+  </script>
+</body>
+</html>

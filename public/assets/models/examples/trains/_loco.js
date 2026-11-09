@@ -1,9 +1,10 @@
+// @ts-check
 // Пример детальных моделей (examples): электровозы с наклонным лобовым стеклом и пантографами.
 // Электровозы: пассажирский (красный, как ЭП2К/ЭП20 в ливрее РЖД) и грузовой (секция «Синары»-
 // подобного двухсекционного). Кабина — у торца z = length: нижняя часть лба вертикальная, лобовое
 // стекло наклонено назад. Пантографы на крыше: передний поднят к контактному проводу.
 import * as THREE from "three";
-import { MATERIALS } from "../../../js/lib/palette.js";
+import { MATERIALS } from "../../../shared/materials.js";
 import { geometry, LineBatch } from "../../../../engine/index.js";
 
 const { Batch, cap, extrude, merge, panel, wall } = geometry;

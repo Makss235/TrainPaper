@@ -1,9 +1,10 @@
+// @ts-check
 // Пример детальных моделей (examples): скоростной электропоезд с обтекаемым носом.
 // Скоростной электропоезд (обобщённый, в духе «Ласточки»): светлый кузов, сплошная тёмная лента окон,
 // красный низ с подъёмом к носу, красные двери. Головной вагон с обтекаемым носом и промежуточный.
 // Состав собирается так: голова, промежуточные, голова развёрнутая (см. trains/index.js).
 import * as THREE from "three";
-import { MATERIALS } from "../../../js/lib/palette.js";
+import { MATERIALS } from "../../../shared/materials.js";
 import { geometry, rgb } from "../../../../engine/index.js";
 
 const { loft } = geometry;
@@ -82,6 +83,7 @@ function nose(L) {
       return { z: L - NOSE + NOSE * t, pts: profile.map(([x, y]) => [x * sx, BOTTOM + (y - BOTTOM) * k]) };
     });
     const g = loft(sections, { closed: true, capEnd: true, center: [0, BOTTOM + 1.2] });
+    /** @type {number[]} */
     const red = rgb("red"), glassC = [.17, .2, .24], body = rgb("#e6e8e9"), dark = rgb("band");
     const n = profile.length;                                   // отрезков в сечении (профиль замкнут)
     const zone = (i, s) => {
@@ -109,12 +111,14 @@ function nose(L) {
   };
 }
 
+/** @returns {any} */
 function spec(L, head) {
   const canvas = liveryCanvas(4096, Math.round(4096 / L * VSCALE));
   paint(canvas, L, { head });
   // у головного вагона борта разные (нос с одной стороны) — второй холст для борта +x
   const canvasRight = head ? liveryCanvas(4096, canvas.height) : null;
   if (canvasRight) paint(canvasRight, L, { head, mirror: true });
+  /** @type {any} */
   const s = {
     length: L, half: 1.6, bottom: BOTTOM, wallTop: WALL_TOP, shoulder: SHOULDER, liveryBands: 3,
     livery: { canvas, canvasRight, vBase: BOTTOM, vScale: VSCALE },

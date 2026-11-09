@@ -1,3 +1,4 @@
+// @ts-check
 // GLSL сцены. Пишется в стиле GLSL 1 (attribute/varying/texture2D) — three.js сам переводит
 // его в GLSL 3 для WebGL 2. Цвет на выходе — уже «экранный» (sRGB), без пересчёта.
 //
@@ -26,7 +27,9 @@ export const COMMON = /* glsl */`
 
 /** Освещение: общие uniforms света (engine/light.js) и функции. */
 export const LIGHTING = /* glsl */`
-  #define MAX_LAMPS 8
+  #ifndef MAX_LIGHTS
+    #define MAX_LIGHTS 32
+  #endif
   uniform vec3 uSunDir;          // направление НА солнце
   uniform vec3 uSun;             // цвет × сила прямого света (0 ночью)
   uniform vec3 uAmbSky;          // рассеянный свет неба (сверху)
@@ -35,8 +38,13 @@ export const LIGHTING = /* glsl */`
   uniform vec3 uFog;             // near, far, max
   uniform float uCeiling;
   uniform float uLamps;          // 0 днём … 1 ночью: фонари, окна, огни
-  uniform vec4 uLampPos[MAX_LAMPS];   // xyz, w — радиус (0 — нет фонаря)
-  uniform vec3 uLampCol[MAX_LAMPS];
+  uniform sampler2D uLightTex;   // источники: 4 текселя на каждый (render/lighting.js setLights)
+  uniform float uLightCount;
+  uniform float uLightTexH;
+  uniform highp sampler2DShadow uSpotShadow0;
+  uniform highp sampler2DShadow uSpotShadow1;
+  uniform mat4 uSpotShadowMatrix[2];
+  uniform vec4 uSpotShadowParams[2];   // x — включено, y — сдвиг глубины, z — сдвиг по нормали (м), w — тексель
   uniform vec3 uSkyTop;
   uniform vec3 uSkyHorizon;
   uniform float uWet;            // мокрая поверхность после дождя
@@ -44,7 +52,7 @@ export const LIGHTING = /* glsl */`
   uniform sampler2D uCoverMap;   // карта высот сверху: есть ли над точкой крыша
   uniform vec4 uCoverBox;        // x0, z0, размер, есть ли карта
   uniform vec2 uCoverRange;      // верх, низ карты по y
-  // 1 — над точкой открытое небо, 0 — крыша (навес, вагон, мост). Вне карты — небо.
+  // 1 — над точкой открытое небо, 0 — крыша (навес, крыша, мост). Вне карты — небо.
   float openSky(vec3 p) {
     if (uCoverBox.w < .5) return 1.0;
     vec2 uv = (p.xz - uCoverBox.xy) / uCoverBox.z;
@@ -59,6 +67,7 @@ export const LIGHTING = /* glsl */`
   uniform mat4 uShadowMatrix;
   uniform vec4 uShadowParams;    // x — включено, y — сдвиг глубины, z — сдвиг по нормали (м), w — размер текселя
   uniform vec2 uShadowFade;      // тень гаснет к краю области теней: от … до (м от камеры)
+  uniform vec2 uShadowStyle;     // x — сила тени (0 — нет, 1 — полная), y — мягкость края (множитель шага PCF)
 
   // Тени-узоры (ограда): плоскость x = const, прутья и перила. Считаются аналитически — без карты теней,
   // поэтому тени тонких прутьев не дают муара.
@@ -73,14 +82,14 @@ export const LIGHTING = /* glsl */`
     vec4 s = uShadowMatrix * vec4(p, 1.0);
     if (s.x < 0.0 || s.x > 1.0 || s.y < 0.0 || s.y > 1.0 || s.z > 1.0) return 1.0;
     float z = s.z - uShadowParams.y;
-    float t = uShadowParams.w;
+    float t = uShadowParams.w * uShadowStyle.y;
     // PCF 4×4: каждое чтение уже сравнивает 4 соседних текселя с билинейным весом —
     // край тени мягкий (~2 текселя) и без «лесенки» от размера текселя
     float sum = 0.0;
     for (int i = 0; i < 4; i++)
       for (int j = 0; j < 4; j++)
         sum += textureLod(uShadowMap, vec3(s.xy + (vec2(float(i), float(j)) - 1.5) * t, z), 0.0);
-    float sh = sum / 16.0;
+    float sh = mix(1.0, sum / 16.0, uShadowStyle.x);
     float d = distance(wp, cameraPosition);
     return mix(sh, 1.0, smoothstep(uShadowFade.x, uShadowFade.y, d));
   }
@@ -109,19 +118,50 @@ export const LIGHTING = /* glsl */`
     return lit;
   }
 
-  // точечные источники: w — радиус; w > 0 — горит только ночью (× uLamps), w < 0 — всегда
+  vec4 lightTexel(float i, float k){ return texture2D(uLightTex, vec2((k + .5) * .25, (i + .5) / uLightTexH)); }
+
+  // тень от прожектора: карта глубины из его «глаз», PCF 3×3. Индекс — 0 или 1 (своя карта у каждого)
+  float spotShadow(float idx, vec3 wp, vec3 n){
+    bool first = idx < .5;
+    vec4 P = vec4(wp + n * (first ? uSpotShadowParams[0].z : uSpotShadowParams[1].z), 1.0);
+    vec4 s = first ? uSpotShadowMatrix[0] * P : uSpotShadowMatrix[1] * P;
+    vec4 prm = first ? uSpotShadowParams[0] : uSpotShadowParams[1];
+    if (prm.x < .5 || s.w <= 0.0) return 1.0;
+    vec3 c = s.xyz / s.w;
+    if (c.x < 0.0 || c.x > 1.0 || c.y < 0.0 || c.y > 1.0 || c.z > 1.0) return 1.0;
+    float z = c.z - prm.y;
+    float sum = 0.0;
+    for (int i = -1; i <= 1; i++)
+      for (int j = -1; j <= 1; j++) {
+        vec3 q = vec3(c.xy + vec2(float(i), float(j)) * prm.w, z);
+        sum += first ? textureLod(uSpotShadow0, q, 0.0) : textureLod(uSpotShadow1, q, 0.0);
+      }
+    return sum / 9.0;
+  }
+
+  // источники света: точечные (пятно с мягким краем), прожекторы (конус с полутенью, может быть тень),
+  // направленные (подсветка без спада). Ночные горят × uLamps.
   vec3 lampLight(vec3 wp, vec3 n){
     vec3 sum = vec3(0.0);
-    for (int i = 0; i < MAX_LAMPS; i++){
-      vec4 L = uLampPos[i];
-      if (L.w == 0.0) continue;
-      float range = abs(L.w);
-      vec3 d = L.xyz - wp;
-      float dist = length(d);
-      float att = clamp(1.0 - dist / range, 0.0, 1.0);
-      att = att * att * (3.0 - 2.0 * att);               // мягкий край светового пятна
-      float k = L.w > 0.0 ? uLamps : 1.0;
-      sum += uLampCol[i] * att * k * (.3 + .7 * max(dot(n, d / max(dist, 1e-3)), 0.0));
+    for (int i = 0; i < MAX_LIGHTS; i++){
+      if (float(i) >= uLightCount) break;
+      float fi = float(i);
+      vec4 a = lightTexel(fi, 0.0), b = lightTexel(fi, 1.0), c = lightTexel(fi, 2.0), d = lightTexel(fi, 3.0);
+      vec3 L;
+      float att = 1.0;
+      if (d.x > 1.5) {
+        L = -c.xyz;                                      // направленный: c — куда идёт свет
+      } else {
+        vec3 dv = a.xyz - wp;
+        float dist = length(dv);
+        L = dv / max(dist, 1e-3);
+        att = clamp(1.0 - dist / a.w, 0.0, 1.0);
+        att = att * att * (3.0 - 2.0 * att);             // мягкий край светового пятна
+        if (d.x > .5) att *= smoothstep(c.w, max(d.y, c.w + 1e-4), dot(-L, c.xyz));   // конус прожектора
+        if (d.z > -.5 && att > 0.0) att *= spotShadow(d.z, wp, n);
+      }
+      float k = b.w > .5 ? uLamps : 1.0;
+      sum += b.rgb * att * k * (.3 + .7 * max(dot(n, L), 0.0));
     }
     return sum;
   }
@@ -217,7 +257,7 @@ export const TOON_FRAGMENT = /* glsl */`
       base = mix(base, uPatColor, sl);
     #endif
     #ifdef PAT_STRIPES
-      // полосы по координате поверхности u (гофра, рёбра, гармошка) — едут вместе с вагоном.
+      // полосы по координате поверхности u (гофра, рёбра, гармошка) — едут вместе с объектом.
       // uPat = шаг, ширина (в единицах u), сила, —
       float st = stripesC(vUv.x / uPat.x, uPat.y / uPat.x);
       base = mix(base, uPatColor, st * uPat.z);

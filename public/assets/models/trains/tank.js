@@ -1,3 +1,4 @@
+// @ts-check
 // Цистерна — примитивы: цилиндр котла, колпак, мостик.
 import { FREIGHT_BOTTOM, freightFrame } from "./_freight.js";
 

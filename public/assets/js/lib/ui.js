@@ -1,3 +1,4 @@
+// @ts-check
 // Кнопка станции в углу и панель настроек — общая для обоих видов.
 import { searchStations } from "./api.js";
 import { settings, update } from "./settings.js";

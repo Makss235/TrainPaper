@@ -31,15 +31,12 @@
   "three": "/vendor/three/three.module.min.js",
   "three/addons/": "/vendor/three/addons/"
 } }</script>
-<!-- необязательно: луна на ночном небе -->
-<script defer src="https://cdn.jsdelivr.net/npm/suncalc@1.9.0/suncalc.js"></script>
-
 <script type="module">
   import { Engine } from "/engine/index.js";
 
   const engine = new Engine({
     container: document.getElementById("view"),            // холст заполнит контейнер целиком
-    paths: { models: "/models/", prefabs: "/prefabs/" },
+    paths: { models: "/models/", prefabs: "/prefabs/", scripts: "/scripts/" },
   });
   await engine.load("/scenes/main.jsonc");                  // или объект { environment, objects }
   engine.environment.location = { lat: 55.75, lon: 37.62 };
@@ -59,7 +56,10 @@
 | `canvas` | готовый холст (тогда размер холста — ваша забота, движок его не удаляет) | создаётся сам |
 | `paths.models` | папка моделей | `assets/models/` относительно страницы |
 | `paths.prefabs` | папка префабов | `assets/prefabs/` |
+| `paths.scripts` | папка скриптов (компоненты по соглашению, [scripts.md](scripts.md)) | `assets/scripts/` |
+| `paths.assets` | корень содержимого: от него пути картинок, LUT, расписаний в данных сцены | над папкой моделей |
 | `paths.manifest` | манифест моделей (адрес относительно папки моделей) или `null` — не загружать | `index.jsonc` |
+| `paths.scriptsManifest` | замены имён скриптов (`index.jsonc` в папке скриптов) или `null` | `index.jsonc` |
 | `palette` | именованные цвета `{ "brick": "#a5574a" }` | — |
 | `quality` | качество и нагрузка (см. ниже) | `DEFAULT_QUALITY` |
 | `style` | свет, дымка, фильтры (см. ниже) | `DEFAULT_STYLE` |
@@ -166,17 +166,19 @@ engine.dispose();        // остановить анимации, освобо�
 - **Цвета — экранные (sRGB), как в CSS.** Движок выключает `THREE.ColorManagement` — это глобальная
   настройка three.js. Если на той же странице есть другой код на three.js, который рассчитывает на
   управление цветом, держите его в отдельной копии three.js или учитывайте это.
-- **Палитра и реестр компонентов — общие** для всех движков на странице (`definePalette`,
-  `registerComponent`). Материалы, свет, сцена, камеры — у каждого движка свои; два движка на одной
-  странице работают, но каждый держит свой контекст WebGL — не больше 2–3 на страницу.
+- **Реестр компонентов и эффектов — общий** для всех движков на странице (`registerComponent`, `registerPostEffect`).
+  Палитра (`engine.palette`), пресеты погоды (`engine.weather.table`), таблица неба, часы (`engine.time`),
+  материалы, свет, сцена, камеры — у каждого движка свои (пример — `engine/examples/two-engines.html`);
+  два движка на одной странице работают, но каждый держит свой контекст WebGL — не больше 2–3 на страницу.
 - Движок рисует **по требованию**: если вы меняете объекты three.js напрямую, вызовите
   `engine.invalidate("scene")` (или `gameObject.moved()`), иначе кадр не обновится.
-- Луна рисуется, только если на странице есть `SunCalc` (тег `<script>` выше); без неё — ночное небо без луны.
+- Солнце и луна (положение и фаза) считаются самим движком — внешние библиотеки не нужны.
 - Инспектор (`engine/dev/inspector.js`) подключается отдельно и только когда нужен:
   `import("/engine/dev/inspector.js").then(m => m.startInspector(engine))`.
 
 ## 9. Типы и подсказки
 
-Код размечен JSDoc. В корне проекта лежит `jsconfig.json`: VS Code подсказывает свойства `Engine`,
-`GameObject`, `Component` и проверяет типы в файлах с `// @ts-check`. Скопируйте его рядом с движком,
-если хотите того же в своём проекте.
+Код размечен JSDoc, публичные типы — `engine/types.d.ts` (`ModelDefinition`, `Kit`, `ObjectData`, `SceneData`,
+`EngineEvents`). В корне проекта лежит `jsconfig.json` (строгая проверка `strict`): VS Code подсказывает свойства
+`Engine`, `GameObject`, `Component` и проверяет типы в файлах с `// @ts-check`; `npm run check` — то же из консоли.
+Скопируйте его рядом с движком, если хотите того же в своём проекте.

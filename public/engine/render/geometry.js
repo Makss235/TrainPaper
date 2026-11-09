@@ -1,3 +1,4 @@
+// @ts-check
 // Строители геометрии — для моделей (assets/models/*.js) и встроенных компонентов. Всё — с плоскими гранями: у каждой грани своя нормаль и, значит, свой тон
 // (cel-стиль). Мир в метрах: x — поперёк пути (вправо), y — вверх (0 — головка рельса),
 // z — вдоль пути (−z — к горизонту, туда смотрит камера по умолчанию).
@@ -8,7 +9,7 @@
 //   b.add(geometry, "steel", matrix);                        // любая геометрия
 //   group.add(b.mesh(material));                             // материал с vertexColors: true
 import * as THREE from "three";
-import { rgb } from "./palette.js";
+import { currentPalette } from "./palette.js";
 
 /** Коробка по границам: [x0, x1], [y0, y1], [z0, z1]. */
 export function boxGeometry([x0, x1], [y0, y1], [z0, z1]) {
@@ -29,6 +30,7 @@ export function flat(g) {
  * линия), от z0 до z1. uv: u — доля длины, v — (y − vBase) / vScale. Возвращает плоскогранную геометрию.
  * closed — замкнуть профиль (последняя точка соединится с первой).
  */
+/** @param {any} profile @param {number} z0 @param {number} z1 @param {{closed?: boolean, vBase?: number, vScale?: number, uFlip?: boolean, center?: number[] | null, uLength?: number | null}} [o] */
 export function extrude(profile, z0, z1, { closed = false, vBase = 0, vScale = 1, uFlip = false, center = null, uLength = null } = {}) {
   const pos = [], uv = [];
   const n = closed ? profile.length : profile.length - 1;
@@ -50,6 +52,7 @@ export function extrude(profile, z0, z1, { closed = false, vBase = 0, vScale = 1
 }
 
 /** Разворачивает грани наружу от оси [cx, cy] (центр сечения). */
+/** @param {any} g @param {number[]} c */
 function outward(g, [cx, cy]) {
   const p = g.attributes.position, nrm = g.attributes.normal;
   for (let i = 0; i < p.count; i += 3) {
@@ -86,8 +89,9 @@ export function face(g, normal) {
 /**
  * Лофт: поверхность через последовательные сечения одинаковой длины.
  * sections — [{ z, pts: [[x, y], ...] }]; nose: true — замкнуть последнее сечение плоской «крышкой».
- * Так строятся носовые части электропоездов и кабины локомотивов.
+ * Так строятся обтекаемые носовые части и кабины машин.
  */
+/** @param {any[]} sections @param {{closed?: boolean, capEnd?: boolean, capStart?: boolean, center?: number[] | null}} [o] */
 export function loft(sections, { closed = false, capEnd = false, capStart = false, center = null } = {}) {
   const pos = [];
   const m = sections[0].pts.length;
@@ -132,7 +136,7 @@ export function cap(pts, z, dir = 1) {
 }
 
 /**
- * Плоская стена с проёмами (борт вагона с окнами): outline и holes — точки [s, t] в плоскости стены,
+ * Плоская стена с проёмами (борт с окнами): outline и holes — точки [s, t] в плоскости стены,
  * place(s, t) → [x, y, z] в мире. normal — куда смотрит стена. uv(s, t) → [u, v] для текстуры.
  */
 export function wall(outline, holes, place, normal, uvOf) {
@@ -211,10 +215,10 @@ export function merge(list) {
   return out;
 }
 
-/** Покрасить всю геометрию в один цвет (атрибут color). */
-export function paint(g, color) {
+/** Покрасить всю геометрию в один цвет (атрибут color). @param {any} g @param {string | number[]} color @param {import("./palette.js").Palette} [palette] */
+export function paint(g, color, palette = currentPalette()) {
   g = g.index ? g.toNonIndexed() : g;
-  const c = rgb(color), n = g.attributes.position.count, arr = new Float32Array(n * 3);
+  const c = palette.rgb(color), n = g.attributes.position.count, arr = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) arr.set(c, i * 3);
   g.setAttribute("color", new THREE.BufferAttribute(arr, 3));
   return g;
@@ -222,7 +226,9 @@ export function paint(g, color) {
 
 /** Склейка мелких деталей с цветом у вершин — один меш, один вызов отрисовки. */
 export class Batch {
-  constructor() {
+  /** @param {import("./palette.js").Palette} [palette]  палитра для имён цветов (по умолчанию — текущая) */
+  constructor(palette = currentPalette()) {
+    this.palette = palette;
     this.parts = [];
   }
 
@@ -231,7 +237,7 @@ export class Batch {
     let g = geometry.index ? geometry.toNonIndexed() : geometry.clone();
     if (matrix) g.applyMatrix4(matrix);
     if (!g.attributes.normal) g.computeVertexNormals();
-    this.parts.push(paint(g, color));
+    this.parts.push(paint(g, color, this.palette));
     return this;
   }
 

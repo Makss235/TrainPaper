@@ -1,0 +1,15 @@
+// Префаб вагона — если вагону нужно больше, чем модель: свои огни, таблички, скрипты.
+// В составе (assets/data/trains.jsonc) вагон-префаб указывается как "cars/<имя файла>":
+//   "consist": ["trains/loco-ep", { "model": "cars/coach-lit", "repeat": 6 }]
+// Начало координат — торец вагона z = 0 (хвост), вагон идёт вдоль +z. Длина и переходы берутся из meta модели.
+// Огни с метками "head-…" горят у головного вагона, "tail-…" — у хвостового (TrainLights).
+// Вагон-модель без префаба получает такие огни сам — из meta (tailLights, headLights).
+{
+  "name": "Вагон",
+  "components": [
+    { "type": "Model", "model": "trains/coach-fpk" },
+    { "type": "Glow", "id": "tail-0", "offset": [-1.15, 1.05, -0.06], "radius": 0.9, "color": [1, 0.2, 0.12], "intensity": 0.55 },
+    { "type": "Glow", "id": "tail-1", "offset": [1.15, 1.05, -0.06], "radius": 0.9, "color": [1, 0.2, 0.12], "intensity": 0.55 },
+    { "type": "Light", "id": "tail-light", "range": 6, "intensity": 0.4, "color": [1, 0.25, 0.15], "offset": [0, 1.1, -0.6] }
+  ]
+}

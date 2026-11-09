@@ -1,0 +1,14 @@
+// Поезд: вагоны по составу (Train), движение по пути (TrainMotion), огни и свет из окон (TrainLights).
+// Состав и номер задаются у экземпляра: { "prefab": "train", "components": [{ "type": "Train", "consist": "emu-fast" }] }.
+// Так поезда создаёт TrainManager (rail/train-manager.js); поезд можно поставить и прямо в сцене:
+//   { "prefab": "train", "components": [{ "type": "Train", "consist": "fpk-long" },
+//                                        { "type": "TrainMotion", "stop": "Платформа 1", "dir": -1 }] }
+{
+  "name": "Поезд",
+  "static": false,
+  "components": [
+    { "type": "Train" },
+    { "type": "TrainMotion" },
+    { "type": "TrainLights" }
+  ]
+}

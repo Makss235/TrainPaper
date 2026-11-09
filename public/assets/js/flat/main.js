@@ -1,9 +1,10 @@
+// @ts-check
 // Вид «Вагон»: смотрим с платформы на хвост поезда сбоку. Хвостовой вагон с красной дверью,
 // в окне служебного купе — маршрутная табличка, слева — табличка станции и фонарь.
 import { localTime, startApp } from "../lib/app.js";
-import { bellowsShapes, BODY_BOTTOM_M, CAR_L, coachShapes, H_M, PITCH, ROOF, RZD_LOGO } from "../lib/coach.js";
+import { bellowsShapes, BODY_BOTTOM_M, CAR_L, coachShapes, H_M, PITCH, ROOF, RZD_LOGO } from "../../shared/livery/coach-shapes.js";
 import { clamp } from "../lib/color.js";
-import { pathD, roundRect } from "../lib/geom.js";
+import { pathD, roundRect } from "../../shared/geom.js";
 import { Motion, swapper } from "../lib/motion.js";
 import { city, expand, title, translit } from "../lib/names.js";
 import { applyPalette, injectMaterialStyles, shadeFactor, sunStrength } from "../lib/palette.js";
@@ -11,11 +12,11 @@ import { drawPlate, PLATE_W } from "../lib/plate.js";
 import { noAnimation } from "../lib/settings.js";
 import { initStars, renderSky } from "../lib/skyview.js";
 import { drawClouds, driftClouds, lightClouds } from "../lib/clouds.js";
-import { box, clipAxis, hull } from "../lib/shadow.js";
+import { box, clipAxis, hull } from "../../shared/clip.js";
 import { countdown, delayInfo, eventWord, headline, numberText, stopMinutes } from "../lib/trains.js";
 
 const NS = "http://www.w3.org/2000/svg";
-const $ = id => document.getElementById(id);
+const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
 const poster = $("poster");
 const CARS = 4;
 const VIEW_AZ = 200;                 // небо рисуется так, будто смотрим на юго-юго-запад
@@ -54,6 +55,7 @@ function rng(seed) {
 
 /* ---------- раскладка ---------- */
 
+/** @type {any} */
 let L;
 function layout() {
   const W = innerWidth, H = innerHeight;
@@ -162,6 +164,7 @@ function drawFar() {
   const defs = el("defs", {}, svg);
   radial(defs, "gLampFar", [[0, "#fff1c9", 1], [.25, "#ffd98e", .5], [1, "#ffcf7a", 0]]);
 }
+/** @type {any[]} */
 let farLamps = [];
 
 function radial(defs, id, stops) {
@@ -293,12 +296,14 @@ function drawWindow(parent, w, X, Y, S, id) {
 
 /* ---------- ближний план: платформа, фонарь, табличка станции ---------- */
 
+/** @type {any} */
 let signParts = null, spillSlot = null, floorShadow = null, signGeom = null, lampGeom = null;
 
 /* ---------- солнце: освещённость и тени ---------- */
 
 // Свет приходит со стороны зрителя — оттуда, где на небе солнце (слева или справа),
 // с высотой солнца над горизонтом. x — вправо, z — вверх, d — от глаз вглубь (к вагону).
+/** @type {any} */
 let light = null, coachShadow = null, coachShadowClip = null;
 
 function flatLight(sky) {
@@ -435,6 +440,7 @@ function updateSign() {
 
 /* ---------- данные ---------- */
 
+/** @type {{info: any, shown: any, list: any[], board: any}} */
 const state = { info: null, shown: null, list: [], board: null };
 
 function updatePlate() {
@@ -511,7 +517,9 @@ const showTrain = swapper({
   },
 });
 
+/** @type {any} */
 let cloudField = null;
+/** @type {[HTMLElement, number][]} */
 const layers = [[$("sky"), 3], [$("clouds"), 4], [$("far"), 8], [$("train"), 16], [$("near"), 26]];
 let tx = 0, ty = 0, cx = 0, cy = 0;
 addEventListener("pointermove", e => { tx = e.clientX / innerWidth * 2 - 1; ty = e.clientY / innerHeight * 2 - 1; });

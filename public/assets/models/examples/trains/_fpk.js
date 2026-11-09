@@ -1,11 +1,12 @@
+// @ts-check
 // Пример детальных моделей (examples): вагоны ФПК с ливреей по схеме окраски (общей с видом «Вагон»).
 // Включаются в assets/models/index.jsonc → aliases: "trains/coach-fpk": "examples/trains/coach-fpk.js".
 // Пассажирские вагоны ФПК: одноэтажный (по схеме окраски из lib/coach.js — та же, что у вида
 // «Вагон») и двухэтажный. Оба строятся общим строителем trains/coach.js по спецификации.
 import {
   BODY_BOTTOM_M, CAR_L, DOOR_FAR, DOOR_LOGO, H_M, PLATE_WINDOW, WINDOW_TRANSOM, WINDOW_V, WINDOWS,
-} from "../../../js/lib/coach.js";
-import { MATERIALS } from "../../../js/lib/palette.js";
+} from "../../../shared/livery/coach-shapes.js";
+import { MATERIALS } from "../../../shared/materials.js";
 import { buildCoach } from "./_coach.js";
 import { drawLogo, liveryCanvas, paintFpk } from "./_livery.js";
 
