@@ -1,6 +1,6 @@
-// Палитра: имена цветов, которые можно писать в данных вместо "#rrggbb" ({ "color": "platform" }).
+// Палитра: имена цветов, которые можно писать в данных вместо "#rrggbb" ({ "color": "floor" }).
 // У каждого движка своя палитра — engine.palette; её задаёт проект:
-//   new Engine({ palette: { platform: "#c4c4bf" } })  или  engine.palette.define({ platform: "#c4c4bf" }).
+//   new Engine({ palette: { floor: "#c4c4bf" } })  или  engine.palette.define({ floor: "#c4c4bf" }).
 // Манифест моделей (assets/models/index.jsonc, поле palette) дополняет палитру своего движка.
 //
 // Код моделей строится синхронно внутри build(params, kit): на это время «текущей» становится палитра

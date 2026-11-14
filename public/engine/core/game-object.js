@@ -7,7 +7,7 @@
 //   const lamp = new GameObject("Фонарь");
 //   lamp.setPosition(-3.5, 1.1, -14);
 //   lamp.addComponent("Model", { model: "lamp-post" });
-//   lamp.addComponent("Light", { range: 11, night: true, offset: [0.9, 5.7, 0] });
+//   lamp.addComponent("Light", { range: 11, offset: [0.9, 5.7, 0] });
 //   engine.scene.add(lamp);
 // @ts-check
 import * as THREE from "three";
@@ -267,6 +267,11 @@ export class GameObject {
     this.object3D.visible = on;
     // onEnable/onDisable и сон update — у всех компонентов, чья активность в иерархии поменялась
     if (parentActive && this.started) this.#activeChanged(on);
+    // неподвижные меши склеены в общие instanced-меши: без пересборки выключенный объект остался бы
+    // в кадре (и в карте теней), а включённый рисовался бы поштучно
+    let hasStatic = false;
+    this.traverse(o => { if (o.static) hasStatic = true; });
+    if (hasStatic) this.engine?.scene?.markDirty();
     this.engine?.invalidate("scene", "shadow");
   }
 
@@ -290,7 +295,7 @@ export class GameObject {
     this.engine?.invalidate("scene", "shadow");
   }
 
-  /** Поиск потомка по имени (или пути "Платформа/Фонарь 3"). @param {string} name @returns {GameObject | null} */
+  /** Поиск потомка по имени (или пути "Двор/Фонарь 3"). @param {string} name @returns {GameObject | null} */
   find(name) {
     if (name.includes("/")) {
       /** @type {GameObject | null} */

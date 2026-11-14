@@ -1,6 +1,6 @@
-// Хук загрузчика модулей для тестов: "three" и "three/addons/…" → public/assets/vendor/three/.
+// Хук загрузчика модулей для тестов: "three" и "three/addons/…" → public/vendor/three/.
 // @ts-check
-const VENDOR = new URL("../public/assets/vendor/three/", import.meta.url);
+const VENDOR = new URL("../public/vendor/three/", import.meta.url);
 
 /**
  * @param {string} specifier @param {any} context @param {(s: string, c: any) => any} next

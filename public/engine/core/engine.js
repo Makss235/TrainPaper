@@ -52,7 +52,7 @@ function ignoreCancelled() {
  * @property {HTMLCanvasElement} [canvas] или готовый холст
  * @property {Partial<typeof DEFAULT_QUALITY>} [quality]  качество и нагрузка
  * @property {any} [style]               стиль: свет, дымка, фильтры (render/style.js)
- * @property {{assets?: string, models?: string, prefabs?: string, scripts?: string, manifest?: string|null, scriptsManifest?: string|null}} [paths]  где лежат модели, префабы, скрипты; assets — корень для путей в данных (картинки, расписания)
+ * @property {{assets?: string, models?: string, prefabs?: string, scripts?: string, manifest?: string|null, scriptsManifest?: string|null}} [paths]  где лежат модели, префабы, скрипты; assets — корень для путей в данных (картинки, таблицы)
  * @property {Record<string, string>} [palette]  именованные цвета
  * @property {boolean} [pointer]         камера поворачивается за курсором (по умолчанию да)
  * @property {boolean} [animate]         анимации (false — для скриншотов: всё сразу, без движения)
@@ -92,6 +92,9 @@ export class Engine {
 
     /** Сцена three.js, в которой лежит дерево объектов */
     this.three = new THREE.Scene();
+    /** Размер и место контейнера на странице, CSS-пиксели (обновляется в resize) */
+    this.rect = { left: 0, top: 0, width: 1, height: 1 };
+    this.width = 0; this.height = 0; this.pixelRatio = 0;
     this.camera = new THREE.PerspectiveCamera(50, 1, .3, 6000);
     this.screen = { uRes: { value: new THREE.Vector2(1, 1) }, uMinPx: { value: 1 } };
     this.light = createLightUniforms(this.style);
@@ -106,11 +109,11 @@ export class Engine {
     /** Пост-обработка: стек эффектов сборки кадра (render/post.js) */
     this.post = new PostStack(this);
     this.composite.setStack(this.post);
-    this.shadow = new SunShadow(this.renderer, this.light, Math.min(Q.shadowSize, this.renderer.capabilities.maxTextureSize));
+    this.shadow = new SunShadow(this.renderer, this.light, Q.shadowSize);
 
     this.loop = new Loop(layers => this.render(layers), { maxFps: Q.maxFps });
     this.post.setBase(defaultEffects(this.style.filters));
-    /** Часы симуляции: время суток, расписание, таймеры скриптов (core/time.js) */
+    /** Часы симуляции: время суток, таймеры скриптов (core/time.js) */
     this.time = new SimClock();
     /** update() компонентов и tween() (core/scheduler.js) */
     this.scheduler = new Scheduler(this.loop, this.time, { instant: () => options.animate === false });
@@ -118,6 +121,8 @@ export class Engine {
     this.scene = new Scene(this);
     this.three.add(this.scene.object3D);
     this.cameras = new CameraSystem(this);
+    /** Досрочно закончить идущее растворение (dissolve) @type {(() => void) | null} */
+    this.endDissolve = null;
     this.lights = new LightSystem(this);
     this.weather = new WeatherController(this);
     this.environment = new Environment(this);
@@ -127,20 +132,29 @@ export class Engine {
 
     canvas.addEventListener("webglcontextlost", e => e.preventDefault());
     canvas.addEventListener("webglcontextrestored", () => this.events.emit("contextRestored"));
-    // текстуры с текстом (таблички, ливреи) перерисовываются, когда догрузится шрифт, — показать их сразу
+    // текстуры с текстом (надписи, вывески) перерисовываются, когда догрузится шрифт, — показать их сразу
     document.fonts?.ready.then(() => setTimeout(() => this.invalidate("scene"), 0));
+    // размер: следим за самим контейнером (движок может занимать часть страницы), а окно — на случай
+    // смены масштаба экрана (devicePixelRatio) без смены размера контейнера
     this.onResize = () => this.resize();
     addEventListener("resize", this.onResize);
+    /** @type {ResizeObserver | null} */
+    this.resizeObserver = typeof ResizeObserver === "function" ? new ResizeObserver(this.onResize) : null;
+    this.resizeObserver?.observe(this.container);
     if (options.pointer !== false) {
-      this.onPointer = e => this.cameras.setPointer(e.clientX / innerWidth * 2 - 1, e.clientY / innerHeight * 2 - 1);
-      addEventListener("pointermove", this.onPointer);
+      // курсор — в долях контейнера (−1…1), а не окна: встроенный в страницу движок ведёт себя так же, как полноэкранный
+      this.onPointer = (/** @type {PointerEvent} */ e) => {
+        const r = this.rect;
+        this.cameras.setPointer((e.clientX - r.left) / r.width * 2 - 1, (e.clientY - r.top) / r.height * 2 - 1);
+      };
+      addEventListener("pointermove", this.onPointer, { passive: true });
     }
     this.resize();
     this.environment.update(true);
   }
 
   /**
-   * Подписка на события движка: "sceneLoaded", "environment", "cameraChanged", "frame", "contextRestored"
+   * Подписка на события движка: "sceneLoaded", "environment", "cameraChanged", "frame", "resize", "contextRestored"
    * и события приложения (engine.events.emit). Возвращает отписку.
    * @param {string} name @param {(...args: any[]) => void} fn
    */
@@ -152,7 +166,11 @@ export class Engine {
    */
   tween(o) { return this.scheduler.tween({ realTime: true, ...o }); }
 
-  /** Перерисовать слои: "scene", "sky", "shadow", "fx", "composite". */
+  /**
+   * Перерисовать слои: "scene", "sky", "shadow", "fx", "composite".
+   * "shadow" здесь значит «что-то в сцене сдвинулось»: заодно обновится карта крыш для осадков. Когда сдвинулось
+   * только солнце (геометрия на месте), окружение просит слои у цикла напрямую — карту крыш перерисовывать незачем.
+   */
   invalidate(...layers) {
     if (layers.includes("shadow")) this.precipitation.markDirty();
     this.loop.invalidate(...layers);
@@ -164,9 +182,8 @@ export class Engine {
    */
   async load(source) {
     const data = typeof source === "string" ? await loadData(source) : source;
-    this.cameras.cameras = [];
-    this.cameras.active = null;
-    await this.scene.load(data);
+    // false — пока эта сцена готовилась, попросили другую: применится только последняя
+    if (!await this.scene.load(data)) return this.scene;
     this.environment.configure(this.scene.settings);
     this.post.applyScene(data.post || []);
     this.cameras.update(0);
@@ -175,7 +192,7 @@ export class Engine {
     return this.scene;
   }
 
-  /** Найти объект по имени (или пути «Платформа/Фонарь 3»). @param {string} name */
+  /** Найти объект по имени (или пути «Двор/Фонарь 3»). @param {string} name */
   find(name) {
     return this.scene.find(name);
   }
@@ -194,11 +211,17 @@ export class Engine {
     return gos[0];
   }
 
+  /** Подогнать буферы под размер контейнера (движок вызывает сам; повторный вызов без изменений ничего не делает). */
   resize() {
     const Q = this.quality;
     const rect = this.container.getBoundingClientRect();
     const W = Math.max(1, Math.round(rect.width || innerWidth)), H = Math.max(1, Math.round(rect.height || innerHeight));
-    const pr = Math.min(devicePixelRatio || 1, Q.pixelRatio);
+    this.rect = { left: rect.left, top: rect.top, width: W, height: H };
+    let pr = Math.min(devicePixelRatio || 1, Q.pixelRatio);
+    // потолок числа пикселей: на 4K-экране кадр считается в меньшем разрешении и растягивается —
+    // нагрузка на видеокарту растёт с числом пикселей, а плоской картинке со сглаживанием лишние пиксели почти не видны
+    if (Q.maxPixels > 0) pr = Math.min(pr, Math.sqrt(Q.maxPixels / (W * H)));
+    if (W === this.width && H === this.height && pr === this.pixelRatio) return;
     this.width = W; this.height = H; this.pixelRatio = pr;
     this.renderer.setPixelRatio(pr);
     this.renderer.setSize(W, H, !this.options.canvas);
@@ -210,12 +233,14 @@ export class Engine {
     this.cameras.layout(W, H);
     this.cameras.update(0);
     this.invalidate("scene", "sky");
+    this.events.emit("resize", { width: W, height: H });
   }
 
   /** Нарисовать кадр (вызывает цикл; вручную не нужно). @param {Set<string>} layers */
   render(layers) {
     const r = this.renderer;
     r.info.reset();
+    this.scene.flush();
     this.lights.update();
     const spots = this.lights.shadowsDirty;
     if (layers.has("shadow")) this.shadow.render(this.three);
@@ -241,6 +266,58 @@ export class Engine {
   }
 
   /**
+   * Растворение: сменить картинку не рывком и не пролётом камеры — прежний кадр тает поверх нового.
+   * change() меняет что угодно (камеру, объекты, сцену) — сразу или, вернув промис, с ожиданием (загрузка другой сцены:
+   * прежний кадр стоит на экране, пока она готовится). HTML-экраны сцены (HtmlScreen) растворяются вместе с кадром.
+   * Так движок переходит между перспективной и ортографической камерами (cameras.use).
+   * @param {() => void | Promise<any>} change @param {number} [ms]
+   * @returns {Promise<void>}  выполняется, когда новый кадр уже на экране (растворение ещё идёт)
+   */
+  async dissolve(change, ms = 900) {
+    this.endDissolve?.();
+    if (this.options.animate === false || ms <= 0 || !this.canvas.isConnected || !this.canvas.animate) { await change(); return; }
+    // прежний кадр — на накладку поверх холста (сборка из уже готовых слоёв, сцена заново не рисуется)
+    this.render(new Set(["composite"]));
+    const shot = document.createElement("canvas");
+    shot.width = this.canvas.width;
+    shot.height = this.canvas.height;
+    shot.getContext("2d")?.drawImage(this.canvas, 0, 0);
+    Object.assign(shot.style, { position: "absolute", inset: "0", width: "100%", height: "100%", pointerEvents: "none" });
+    this.canvas.after(shot);
+    // прежние HTML-экраны — копиями на своих местах (копия идёт сразу за оригиналом: поиск по id находит оригинал)
+    const screens = () => /** @type {HTMLElement[]} */ (/** @type {any[]} */ (this.scene.components("HtmlScreen")).map(s => s.el)
+      .filter((el, i, list) => el && el.style.display !== "none" && list.indexOf(el) === i));
+    /** @type {Element[]} */
+    const ghosts = [shot];
+    for (const el of screens()) {
+      const copy = /** @type {HTMLElement} */ (el.cloneNode(true));
+      copy.style.pointerEvents = "none";
+      copy.setAttribute("aria-hidden", "true");
+      el.after(copy);
+      ghosts.push(copy);
+    }
+    let ended = false;
+    this.endDissolve = () => { ended = true; for (const g of ghosts) g.remove(); this.endDissolve = null; };
+    try { await change(); } catch (error) { this.endDissolve?.(); throw error; }
+    if (ended) return;                                                  // пока ждали, началось другое растворение
+    this.cameras.update(0);                                             // камера встаёт на новое место до кадра
+    this.render(new Set(["scene", "sky", "shadow", "composite"]));      // новый кадр — сразу, под накладкой
+    const timing = { duration: ms, easing: "ease-in-out" };
+    const anims = ghosts.map(g => g.animate([{ opacity: 1 }, { opacity: 0 }], { ...timing, fill: "forwards" }));
+    for (const el of screens()) anims.push(el.animate([{ opacity: 0 }, { opacity: 1 }], timing));
+    let done = false;
+    const end = () => {
+      if (done) return;
+      done = true;
+      for (const a of anims) a.cancel();
+      for (const g of ghosts) g.remove();
+      if (this.endDissolve === end) this.endDissolve = null;
+    };
+    this.endDissolve = end;
+    anims[0].finished.then(end, end);
+  }
+
+  /**
    * Экранные координаты (CSS-пиксели) точки мира или null, если она за камерой.
    * @param {number[]} p
    * @returns {[number, number] | null}
@@ -254,7 +331,9 @@ export class Engine {
 
   /** Остановить и освободить всё (холст остаётся в DOM, если передан снаружи). */
   dispose() {
+    this.endDissolve?.();
     removeEventListener("resize", this.onResize);
+    this.resizeObserver?.disconnect();
     if (this.onPointer) removeEventListener("pointermove", this.onPointer);
     for (const k of [...this.loop.anims.keys()]) this.loop.stop(k);
     this.time.clearTimers();
@@ -263,7 +342,11 @@ export class Engine {
     this.shadow.dispose();
     this.lights.dispose();
     this.post.clear();
+    this.materials.dispose();
+    this.sky.dispose();
+    this.composite.dispose();
     for (const t of [this.sceneTarget, this.skyTarget, this.fxTarget]) t.dispose();
+    this.sceneTarget.depthTexture?.dispose();
     this.renderer.dispose();
     if (!this.options.canvas) this.canvas.remove();
   }

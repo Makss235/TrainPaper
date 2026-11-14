@@ -6,7 +6,14 @@ import { title } from "./names.js";
 
 const TOD = [["auto", "Авто"], ["dawn", "Рассвет"], ["day", "День"], ["dusk", "Закат"], ["night", "Ночь"], ["cycle", "Сутки за минуту"]];
 const FILTER = [["all", "Все"], ["arrivals", "Прибытие"], ["departures", "Отправление"]];
-const VIEWS = [["flat", "Вагон"], ["platform", "Платформа"]];
+// «Вид» ссылками (страница без движка): оба вида — страница «Платформа», 2D и 3D одной сцены
+const VIEWS = [["2d", "Вагон"], ["3d", "Платформа"]];
+/** Адрес вида: страница «Платформа» с теми же параметрами и нужным view. @param {string} view */
+function viewHref(view) {
+  const params = new URLSearchParams(location.search);
+  params.set("view", view);
+  return `../platform/?${params}`;
+}
 
 const h = (tag, attrs = {}, ...children) => {
   const el = document.createElement(tag);
@@ -45,9 +52,11 @@ function segmented(key, options, { value = () => settings()[key], select = v => 
 
 /**
  * extras — дополнительные группы панели (их добавляет вид, например «Платформа»: погода, сцена, ракурс):
- *   [{ title, key, options, value?, select? }] — см. segmented().
+ *   [{ title, key, options, value?, select?, visible? }] — см. segmented(); visible() — показывать ли группу сейчас.
+ * views — группа «Вид» переключает настройку на месте: { key, options } (см. segmented()); без неё «Вид» —
+ *   ссылки на страницы видов.
  */
-export function createUI(root, { view, extras = [] }) {
+export function createUI(root, { view, extras = [], views = /** @type {any} */ (null) }) {
   const name = h("span", { class: "st-name" }, "…");
   const clock = h("span", { class: "st-clock" }, "--:--");
   const phase = h("span", { class: "st-phase" });
@@ -59,18 +68,28 @@ export function createUI(root, { view, extras = [] }) {
   const results = h("ul", { class: "results", role: "listbox" });
   const filter = segmented("filter", FILTER);
   const tod = segmented("tod", TOD);
-  const more = extras.map(x => ({ title: x.title, seg: segmented(x.key, x.options, x) }));
+  // ползунок: точное время суток (по часам станции). Пока его двигают, небо идёт за ним; кнопки режимов — выше
+  const pad = n => String(n).padStart(2, "0"), hhmm = m => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+  let dragging = false;
+  const timeLabel = h("output", { class: "time-value" }, "12:00");
+  const timeSlider = h("input", { type: "range", class: "time-slider", min: "0", max: "1439", step: "5", "aria-label": "Время суток",
+    oninput: e => { timeLabel.textContent = hhmm(+e.target.value); update({ tod: "manual", time: +e.target.value }); },
+    onpointerdown: () => { dragging = true; }, onpointerup: () => { dragging = false; }, onchange: () => { dragging = false; } });
+  const timeRow = h("div", { class: "time-row" }, timeSlider, timeLabel);
+  const more = extras.map(x => ({ title: x.title, seg: segmented(x.key, x.options, x), visible: x.visible || (() => true), group: /** @type {any} */ (null) }));
+  const showGroups = () => more.forEach(x => { x.group.hidden = !x.visible(); });
+  const viewSeg = views ? segmented(views.key, views.options, views) : null;
   const suburban = h("input", { type: "checkbox", onchange: e => update({ suburban: e.target.checked }) });
   const status = h("div", { class: "status" });
   const panel = h("div", { class: "panel", role: "dialog", "aria-label": "Настройки обоев", hidden: true },
     h("div", { class: "search" }, input), results,
     h("div", { class: "group" }, h("div", { class: "group-title" }, "Поезда"), filter.box,
       h("label", { class: "check" }, suburban, " пригородные поезда")),
-    h("div", { class: "group" }, h("div", { class: "group-title" }, "Время суток"), tod.box),
-    more.map(x => h("div", { class: "group" }, h("div", { class: "group-title" }, x.title), x.seg.box)),
+    h("div", { class: "group" }, h("div", { class: "group-title" }, "Время суток"), tod.box, timeRow),
+    more.map(x => (x.group = h("div", { class: "group" }, h("div", { class: "group-title" }, x.title), x.seg.box))),
     h("div", { class: "group" }, h("div", { class: "group-title" }, "Вид"),
-      h("div", { class: "seg" }, VIEWS.map(([key, label]) =>
-        h("a", { href: `../${key}/${location.search}`, class: key === view ? "on" : null }, label)))),
+      viewSeg ? viewSeg.box : h("div", { class: "seg" }, VIEWS.map(([key, label]) =>
+        h("a", { href: viewHref(key), class: (key === "2d") === (view === "flat") ? "on" : null }, label)))),
     status,
     h("div", { class: "note" }, "Данные: онлайн-табло ", h("a", { href: "https://www.rzd.ru/ru/11497", target: "_blank", rel: "noopener" }, "rzd.ru")));
 
@@ -107,8 +126,9 @@ export function createUI(root, { view, extras = [] }) {
     button.setAttribute("aria-expanded", "true");
     root.classList.add("open");
     suburban.checked = settings().suburban;
-    filter.sync(); tod.sync();
+    filter.sync(); tod.sync(); viewSeg?.rebuild();
     more.forEach(x => x.seg.rebuild());
+    showGroups();
     input.value = "";
     runSearch();
     setTimeout(() => input.focus({ preventScroll: true }), 0);
@@ -123,13 +143,21 @@ export function createUI(root, { view, extras = [] }) {
   addEventListener("pointerdown", e => !root.contains(e.target) && close());
 
   return {
-    syncSettings() { filter.sync(); tod.sync(); more.forEach(x => x.seg.sync()); suburban.checked = settings().suburban; },
-    refreshExtras() { more.forEach(x => x.seg.rebuild()); },
+    syncSettings() { filter.sync(); tod.sync(); viewSeg?.sync(); more.forEach(x => x.seg.sync()); suburban.checked = settings().suburban; },
+    refreshExtras() { viewSeg?.rebuild(); more.forEach(x => x.seg.rebuild()); showGroups(); },
     setStation(text, id) { name.textContent = text; currentId = id; },
     setClock(text, phaseLabel, preview) {
       clock.textContent = text;
       phase.textContent = phaseLabel;
       root.classList.toggle("preview", !!preview);
+    },
+    /** Время на небе, минуты от полуночи: ползунок следует за ним (кроме момента, когда его двигают). */
+    setTime(minutes) {
+      timeRow.classList.toggle("on", settings().tod === "manual");
+      if (dragging) return;
+      const m = Math.round(minutes / 5) * 5 % 1440;
+      if (+timeSlider.value !== m) timeSlider.value = String(m);
+      timeLabel.textContent = hhmm(Math.round(minutes) % 1440);
     },
     setFlag(text) { flag.textContent = text || ""; flag.hidden = !text; },
     setStatus(text) { status.textContent = text || ""; status.hidden = !text; },

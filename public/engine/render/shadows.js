@@ -1,13 +1,17 @@
 // Карты теней. Общий класс ShadowCaster — карта глубины из «глаз» источника с аппаратным сравнением:
 //   SunShadow  — ортографическая, от солнца (и направленного света) над областью, где тени видны
-//                (обычно — ближние ~100 м платформы и путей). Камера теней привязана к сцене, а не к зрителю,
-//                поэтому края теней не «плывут» при повороте камеры за курсором;
+//                (обычно — ближние ~100 м сцены). Камера теней привязана к сцене, а не к зрителю,
+//                поэтому края теней не «плывут» при повороте камеры за курсором. Карта прямоугольная, вдвое
+//                длиннее вдоль длинной стороны области: у вытянутой сцены текселю достаётся одинаково мало
+//                метров в обе стороны, и тени на ближних стенах чёткие, а не ступенчатые.
+//                Тени есть всё время, пока есть прямой свет (он плавно набирает силу с −1,5°): на рассвете они
+//                проявляются вместе со светом, а не включаются разом уже на освещённой сцене;
 //   SpotShadow — перспективная, от прожектора (Light kind "spot", castShadow). Таких не больше
 //                quality.maxShadowLights (по умолчанию 2). Тени от точечных источников (кубические карты) — нет.
 // Карты перерисовываются только по требованию: invalidate("shadow") (что-то сдвинулось), сдвиг или включение источника.
 //
 // Отбрасывают тень только объекты на слое SHADOW_LAYER (см. castShadow() ниже) — провода,
-// ореолы, прозрачные ограды в карту не попадают: их тонкие тени давали бы муар.
+// ореолы, прозрачные решётки в карту не попадают: их тонкие тени давали бы муар.
 // @ts-check
 import * as THREE from "three";
 
@@ -28,17 +32,19 @@ const BIAS = () => new THREE.Matrix4().set(.5, 0, 0, .5, 0, .5, 0, .5, 0, 0, .5,
 export class ShadowCaster {
   /**
    * @param {THREE.WebGLRenderer} renderer
-   * @param {number} size  сторона карты, текселей
+   * @param {number} size  ширина карты, текселей
    * @param {THREE.Camera} camera  ортографическая или перспективная камера источника
+   * @param {number} [height]  высота карты (по умолчанию квадратная)
    */
-  constructor(renderer, size, camera) {
+  constructor(renderer, size, camera, height = size) {
     this.renderer = renderer;
     this.size = size;
-    const depth = new THREE.DepthTexture(size, size, THREE.UnsignedIntType);
+    this.height = height;
+    const depth = new THREE.DepthTexture(size, height, THREE.UnsignedIntType);
     depth.compareFunction = THREE.LessEqualCompare;          // аппаратное сравнение: PCF за одно чтение
     depth.minFilter = depth.magFilter = THREE.LinearFilter;
     this.depth = depth;
-    this.target = new THREE.WebGLRenderTarget(size, size, {
+    this.target = new THREE.WebGLRenderTarget(size, height, {
       depthBuffer: true, depthTexture: depth, format: THREE.RedFormat, type: THREE.UnsignedByteType,
       minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, generateMipmaps: false,
     });
@@ -92,19 +98,25 @@ export class ShadowCaster {
   }
 }
 
+/** Наименьшая высота солнца для карты теней (sin угла, ≈ 0,6°): ниже тени ушли бы в бесконечность */
+const MIN_SUN_Y = .01;
+const LOW_SUN = new THREE.Vector3();
+
 export class SunShadow extends ShadowCaster {
   /**
    * @param {THREE.WebGLRenderer} renderer
    * @param {import("./lighting.js").LightUniforms} light  uniforms освещения движка
-   * @param {number} size
+   * @param {number} size  короткая сторона карты; длинная — вдвое больше (в пределах возможностей видеокарты)
    */
   constructor(renderer, light, size = 2048) {
-    super(renderer, size, new THREE.OrthographicCamera(-10, 10, 10, -10, .1, 500));
+    const max = renderer.capabilities.maxTextureSize;
+    super(renderer, Math.min(size, max), new THREE.OrthographicCamera(-10, 10, 10, -10, .1, 500), Math.min(size * 2, max));
     this.L = light;
     // область, где нужны тени: [x0, x1], [y0, y1], [z0, z1]
     this.region = { x: [-20, 20], y: [-1, 14], z: [14, -110] };
     this.L.uShadowMap.value = this.depth;
-    this.L.uShadowParams.value.set(0, 0, 0, 1 / size);
+    this.L.uShadowParams.value.set(0, 0, 0, 0);
+    this.L.uShadowTexel.value.set(1 / this.size, 1 / this.height);
   }
 
   /** @param {{x?: number[], y?: number[], z?: number[]}} region */
@@ -121,16 +133,22 @@ export class SunShadow extends ShadowCaster {
    */
   update(scene, sunDir, direct) {
     void scene;
-    this.enabled = direct > .02 && sunDir.y > .01;
+    // Тени включены, пока есть прямой свет, — в том числе когда солнце ещё под горизонтом (свет набирает силу
+    // с −1,5°). Раньше карта включалась только над горизонтом (0,6°), когда прямой свет уже был заметным:
+    // деревья сперва освещались без теней, а потом разом темнели. Ниже 0,6° карта считается для солнца
+    // на 0,6° — направление почти то же, а свет там ещё слабый.
+    this.enabled = direct > .02;
     this.L.uShadowParams.value.x = this.enabled ? 1 : 0;
     if (!this.enabled) return;
+    if (sunDir.y < MIN_SUN_Y) sunDir = LOW_SUN.set(sunDir.x, MIN_SUN_Y, sunDir.z).normalize();
     const { x, y, z } = this.region;
     const center = new THREE.Vector3((x[0] + x[1]) / 2, (y[0] + y[1]) / 2, (z[0] + z[1]) / 2);
     const cam = /** @type {THREE.OrthographicCamera} */ (this.camera);
     cam.position.copy(center).addScaledVector(sunDir, 300);
-    // «верх» карты — вдоль пути: длинная область ложится на карту экономнее
-    cam.up.set(0, 0, -1);
-    if (Math.abs(sunDir.z) > .98) cam.up.set(1, 0, 0);
+    // «верх» карты (её длинная сторона) — вдоль длинной стороны области: вытянутая сцена ложится на карту экономнее
+    const alongZ = Math.abs(z[1] - z[0]) >= Math.abs(x[1] - x[0]);
+    if (alongZ) cam.up.set(0, 0, -1); else cam.up.set(1, 0, 0);
+    if (Math.abs(alongZ ? sunDir.z : sunDir.x) > .98) { if (alongZ) cam.up.set(1, 0, 0); else cam.up.set(0, 0, -1); }
     cam.lookAt(center);
     cam.updateMatrixWorld();
     // рамка камеры по 8 углам области в осях солнца
@@ -145,9 +163,9 @@ export class SunShadow extends ShadowCaster {
     Object.assign(cam, { left: minX, right: maxX, bottom: minY, top: maxY, near: Math.max(.1, -maxZ - 40), far: -minZ + 5 });
     this.updateMatrix();
     this.L.uShadowMatrix.value.copy(this.matrix);
-    const texel = Math.max(maxX - minX, maxY - minY) / this.size;          // метров на тексель
+    const texel = Math.max((maxX - minX) / this.size, (maxY - minY) / this.height);   // метров на тексель (по худшей стороне)
     const depthRange = cam.far - cam.near;
-    this.L.uShadowParams.value.set(1, (.03 + texel * 1.2) / depthRange, texel * 1.6, 1 / this.size);
+    this.L.uShadowParams.value.set(1, (.03 + texel * 1.2) / depthRange, texel * 1.6, 0);
   }
 }
 

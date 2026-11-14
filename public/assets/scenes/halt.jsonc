@@ -11,6 +11,7 @@
   "environment": {
     "azimuth": 200,
     "weather": "partly",
+    "planes": true,                                   // изредка высоко пролетает самолёт со шлейфом
     "shadows": { "x": [-16, 14], "y": [-1, 10], "z": [12, -110] },
     // чуть тёплый свет: остановочный пункт в поле
     "sun": { "intensity": 1.02, "color": "#fff6ea" }
@@ -56,15 +57,15 @@
 
     // ---------- низкая платформа с навесом ----------
     { "name": "Платформа", "position": [-2, 0, 10],
-      "components": [{ "type": "Model", "model": "station/platform", "params": { "length": 160, "width": 6.7, "height": 0.35, "edges": ["+x"], "tactile": null }, "castShadow": false }] },
+      "components": [{ "type": "Model", "model": "station/platform", "params": { "length": 100, "width": 6.7, "height": 0.35, "edges": ["+x"], "tactile": null }, "castShadow": false }] },
     { "name": "Навес", "position": [-3.2, 0.35, -12],
       "components": [{ "type": "Model", "model": "station/canopy", "params": { "width": 4.2, "length": 24, "height": 3.1, "columns": [-1.4], "step": 7.5 } }] },
     { "name": "Светильник навеса", "prefab": "canopy-lamp", "position": [-3.2, 3.45, -16], "repeat": { "count": 3, "step": [0, 0, -7.5] } },
-    { "name": "Фонарь", "prefab": "lamp", "position": [-4.7, 0.35, 4], "repeat": { "count": 6, "step": [0, 0, -28] } },
+    { "name": "Фонарь", "prefab": "lamp", "position": [-4.7, 0.35, 4], "repeat": { "count": 4, "step": [0, 0, -28] } },
     { "name": "Скамейка", "prefab": "bench", "position": [-4.4, 0.35, -18], "rotation": [0, 90, 0], "repeat": { "count": 2, "step": [0, 0, -9] } },
 
-    // ---------- остановка: середина электрички — у середины платформы ----------
-    { "name": "Остановочный пункт", "position": [3.1, 0, -62],
+    // ---------- остановка: середина электрички — у середины платформы (платформа 100 м, короче поезда) ----------
+    { "name": "Остановочный пункт", "position": [3.1, 0, -40],
       "components": [{ "type": "StopPoint", "track": "Путь 1", "align": "center", "platform": { "top": 0.35, "edge": 1.75, "side": "left" } }] },
 
     // ---------- движение по расписанию ----------
@@ -79,7 +80,9 @@
         { "id": "030А", "number": "030А", "from": "Санкт-Петербург", "to": "Москва", "consist": "fpk-long", "track": "Путь 1",
           "stop": "Остановочный пункт", "action": "pass", "arrive": "00:15", "every": 60, "speed": 33, "direction": -1 },
         { "id": "гр-1", "consist": "freight", "track": "Путь 2", "action": "pass", "arrive": "00:32", "every": 60, "speed": 20, "direction": 1 }
-      ] }
+      ] },
+      // кроме расписания — случайные грузовые по второму пути раз в 5–15 минут; не нужны — удалите эту строку
+      { "type": "rail/random-traffic", "consists": ["freight"], "tracks": ["Путь 2"], "direction": 1, "every": [300, 900], "speed": [15, 25], "first": 40 }
     ] }
   ]
 }

@@ -1,10 +1,12 @@
 // Система света: собирает компоненты Light (фонари, прожекторы, направленная подсветка) и StripeShadow
-// (тени оград) со всей сцены и отдаёт их шейдерам.
+// (тени решёток) со всей сцены и отдаёт их шейдерам.
 //
 // Источники лежат в текстуре данных (до 256), шейдер читает не больше quality.maxLights (по умолчанию 32):
 // отбираются те, чья область (сфера радиуса range или конус прожектора) попадает в кадр, по вкладу
 // (яркость × радиус² / расстояние²). Список пересобирается только при изменениях (markDirty) и когда
 // камера ушла далеко или повернулась заметно — в простое ничего не считается.
+// Днём ночные источники (mode "night") в шейдер не попадают вовсе: их вклад × uLamps равен нулю, а цикл по ним
+// на каждом пикселе стоил бы больше половины кадра. Список пересобирается, когда сумерки включают или гасят огни.
 // Тени — у солнца и у не больше quality.maxShadowLights прожекторов с castShadow (render/shadows.js SpotShadow).
 // @ts-check
 import * as THREE from "three";
@@ -12,6 +14,10 @@ import { MAX_SPOT_SHADOWS, setLights, setPatternShadows } from "../render/lighti
 import { ShadowCaster, SpotShadow } from "../render/shadows.js";
 
 const DEG = Math.PI / 180;
+/** uLamps ниже этого — ночные источники считаются погашенными */
+const LAMPS_OFF = .002;
+// рабочие объекты (без выделения памяти при каждом пересчёте)
+const M4 = new THREE.Matrix4(), SPHERE = new THREE.Sphere(), V3 = new THREE.Vector3(), V3B = new THREE.Vector3();
 
 export class LightSystem {
   /** @param {import("../core/engine.js").Engine} engine */
@@ -22,6 +28,8 @@ export class LightSystem {
     /** @type {Set<import("../components/lighting.js").StripeShadow>} */
     this.patterns = new Set();
     this.dirty = true;
+    /** Горят ли ночные источники (uLamps > 0) — по последнему расчёту окружения */
+    this.lampsOn = true;
     /** @type {THREE.Vector3 | null} */
     this.lastCam = null;
     /** @type {THREE.Quaternion | null} */
@@ -49,6 +57,12 @@ export class LightSystem {
   removePattern(p) { this.patterns.delete(p); this.dirty = true; }
   markDirty() { this.dirty = true; this.engine.invalidate("scene"); }
 
+  /** Окружение пересчитало сумерки (uLamps): ночные источники включились или погасли — пересобрать список. */
+  syncLamps() {
+    const on = this.engine.light.uLamps.value > LAMPS_OFF;
+    if (on !== this.lampsOn) this.dirty = true;
+  }
+
   /** Перед кадром: пересобрать список, если что-то поменялось или камера ушла далеко / повернулась. */
   update() {
     const E = this.engine, camera = E.camera, cam = camera.position;
@@ -56,12 +70,13 @@ export class LightSystem {
     const turned = !this.lastRot || this.lastRot.angleTo(camera.quaternion) > 4 * DEG;
     if (!this.dirty && !far && !turned) return;
     this.dirty = false;
-    this.lastCam = cam.clone();
-    this.lastRot = camera.quaternion.clone();
+    (this.lastCam ||= new THREE.Vector3()).copy(cam);
+    (this.lastRot ||= new THREE.Quaternion()).copy(camera.quaternion);
     const Q = E.quality;
+    const lampsOn = (this.lampsOn = E.light.uLamps.value > LAMPS_OFF);
     camera.updateMatrixWorld();
-    this.frustum.setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
-    const sphere = new THREE.Sphere();
+    this.frustum.setFromProjectionMatrix(M4.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+    const sphere = SPHERE;
     /** @type {{data: import("../render/lighting.js").LightData, score: number, light: any}[]} */
     const list = [];
     let total = 0;
@@ -71,6 +86,7 @@ export class LightSystem {
       const p = l.props;
       const on = p.mode === "manual" ? p.on : true;
       if (!on || l.level <= .001 || p.intensity <= 0) continue;
+      if (l.nightOnly && !lampsOn) continue;               // днём ночной источник не светит — и не считается
       const { position, direction } = l.world();
       const kind = p.kind;
       const cosOuter = Math.cos(p.angle * DEG), cosInner = Math.cos(p.angle * (1 - p.penumbra) * DEG);
@@ -80,9 +96,8 @@ export class LightSystem {
       if (kind === "directional") score = 1e9 * p.intensity;
       else {
         // область источника в кадре? (сфера с запасом — без «перескока» у края экрана)
-        const center = kind === "spot"
-          ? new THREE.Vector3(...position).addScaledVector(new THREE.Vector3(...direction), p.range * .5)
-          : new THREE.Vector3(...position);
+        const center = V3.set(position[0], position[1], position[2]);
+        if (kind === "spot") center.addScaledVector(V3B.set(direction[0], direction[1], direction[2]), p.range * .5);
         sphere.set(center, (kind === "spot" ? p.range * .6 : p.range) * 1.15 + 2);
         if (!this.frustum.intersectsSphere(sphere)) continue;
         const d = Math.max(0, cam.distanceTo(center) - p.range * .5);

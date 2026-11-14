@@ -5,7 +5,7 @@
 //   1) зарегистрирована из кода: engine.assets.registerModel("lamp-post", definition);
 //   2) в манифесте моделей (assets/models/index.jsonc): { "aliases": { "lamp-post": "examples/lamp.js" } };
 //   3) по соглашению — файл assets/models/lamp-post.js.
-// Имя с расширением .glb/.gltf — модель из Blender: "station/murmansk.glb".
+// Имя с расширением .glb/.gltf — модель из Blender: "buildings/tower.glb".
 //
 // JS-модель — модуль, который экспортирует по умолчанию описание:
 //   export default {
@@ -39,7 +39,7 @@ export class AssetManager {
     this.modelsBase = new URL(paths.models || "assets/models/", base).href;
     this.prefabsBase = new URL(paths.prefabs || "assets/prefabs/", base).href;
     this.scriptsBase = new URL(paths.scripts || "assets/scripts/", base).href;
-    /** Корень содержимого: от него — пути картинок, расписаний, LUT в данных сцены (по умолчанию — над папкой моделей) */
+    /** Корень содержимого: от него — пути картинок, таблиц, LUT в данных сцены (по умолчанию — над папкой моделей) */
     this.assetsBase = new URL(paths.assets || "../", paths.assets ? base : this.modelsBase).href;
     this.manifestUrl = paths.manifest === null ? null : new URL(paths.manifest || "index.jsonc", this.modelsBase).href;
     this.scriptsManifestUrl = paths.scriptsManifest === null ? null : new URL(paths.scriptsManifest || "index.jsonc", this.scriptsBase).href;

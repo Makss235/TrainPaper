@@ -18,6 +18,7 @@ import * as THREE from "three";
 import { COMMON, LIGHTING } from "../render/shaders.js";
 
 export const SURFACE_LAYER = 2;
+const BOX_LO = new THREE.Vector3(), BOX_HI = new THREE.Vector3(), BOX_P = new THREE.Vector3(), BOX_Q = new THREE.Vector3(), BOX_F = new THREE.Vector3();
 
 /** Пометить непрозрачные меши объекта как поверхности, на которые падают осадки. */
 export function markSurfaces(object, on = true) {
@@ -60,8 +61,9 @@ const PARTICLE_COMMON = /* glsl */`
 const DEPTH_TEST = /* glsl */`
   uniform vec2 uRes;
   uniform sampler2D uSceneDepth;
-  uniform vec2 uNearFar;
-  float viewZ(float depth){ return (uNearFar.x * uNearFar.y) / ((uNearFar.y - uNearFar.x) * depth - uNearFar.y); }
+  uniform vec4 uProjZ;           // строки z и w матрицы проекции: [2][2], [3][2], [2][3], [3][3]
+  // глубина из буфера → z в осях камеры; через саму матрицу — верно для перспективы, ортографии и перехода между ними
+  float viewZ(float depth){ float ndc = depth * 2.0 - 1.0; return (uProjZ.y - ndc * uProjZ.w) / (ndc * uProjZ.z - uProjZ.x); }
   // доля видимости частицы: 0 — за геометрией сцены, плавно у самой поверхности
   float sceneVisible(float particleViewZ){
     float d = texture2D(uSceneDepth, gl_FragCoord.xy / uRes).r;
@@ -104,8 +106,7 @@ const RAIN_VERTEX = /* glsl */`
     vec2 n = vec2(-d.y, d.x);
     vec4 c = aCorner.y < .5 ? ch : ct;
     vec4 v = aCorner.y < .5 ? vh : vt;
-    float focal = projectionMatrix[1][1] * uRes.y * .5;
-    float px = uWidth * focal / -v.z;
+    float px = uWidth * projectionMatrix[1][1] * uRes.y * .5 / c.w;     // w: глубина у перспективы, 1 у ортографии
     float w = max(px, 1.0);
     vAlpha = fade * clamp(px * 1.5, .35, 1.0);       // тонкая капля бледнее, но не исчезает
     float half_ = w * .5 + 1.0;
@@ -162,12 +163,11 @@ const SNOW_VERTEX = /* glsl */`
     float fade = (1.0 - smoothstep(.6 * uRadius, uRadius, r)) * smoothstep(.4, 1.4, length(p - cameraPosition));
     vec4 v = viewMatrix * vec4(p, 1.0);
     if (hidden > 0.0 || fade <= 0.0 || v.z > -.3) { gl_Position = vec4(0.0, 0.0, -2.0, 1.0); return; }
-    float focal = projectionMatrix[1][1] * uRes.y * .5;
     float size = uSize * (.6 + .8 * fract(aSeed.w * 3.17));
-    float px = size * focal / -v.z;
+    vec4 c = projectionMatrix * v;
+    float px = size * projectionMatrix[1][1] * uRes.y * .5 / c.w;
     float w = max(px, 1.5);
     vAlpha = fade * clamp(px / 1.5, .25, 1.0);
-    vec4 c = projectionMatrix * v;
     vec2 q = vec2(aCorner.x, aCorner.y * 2.0 - 1.0);       // углы квадрата −1…1
     c.xy += q * (w + 1.0) / uRes * c.w;                     // полуразмер (w + 1) / 2 пикселя
     vP = q * (w + 1.0) / w;
@@ -297,7 +297,7 @@ export class Precipitation {
       uBoxMin: { value: new THREE.Vector3() }, uBoxSize: { value: new THREE.Vector3() },
       uTime: { value: 0 }, uHeight: { value: depth }, uHeightBox: { value: new THREE.Vector4() },
       uHeightRange: { value: new THREE.Vector2(40, -40) }, uRes: engine.screen.uRes,
-      uSceneDepth: { value: null }, uNearFar: { value: new THREE.Vector2(.3, 6000) },
+      uSceneDepth: { value: null }, uProjZ: { value: new THREE.Vector4(-1, -.6, -1, 0) },
     };
     this.common = common;
     const R = SETTINGS.rain, S = SETTINGS.snow, P = SETTINGS.splash;
@@ -382,10 +382,30 @@ export class Precipitation {
     const cam = camera.position, C = this.common;
     const R = Math.max(SETTINGS.rain.radius, SETTINGS.snow.radius);
     const H = SETTINGS.rain.height;
-    C.uBoxMin.value.set(cam.x - R, cam.y - 5, cam.z - R);
-    C.uBoxSize.value.set(R * 2, H, R * 2);
+    const flat = camera.userData.ortho > .5;
+    if (flat) {
+      // плоская (ортографическая) камера видит прямоугольную «плиту» мира: частицы должны заполнять её целиком —
+      // от нижнего до самого верхнего края кадра, без затухания к краям (у перспективной камеры дальние частицы
+      // и так мельчают, поэтому там объём — цилиндр вокруг камеры)
+      const lo = BOX_LO.set(Infinity, Infinity, Infinity), hi = BOX_HI.set(-Infinity, -Infinity, -Infinity);
+      const forward = BOX_F.set(0, 0, -1).transformDirection(camera.matrixWorld);
+      for (const [nx, ny] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        const p = BOX_P.set(nx, ny, -1).applyMatrix4(camera.projectionMatrixInverse).applyMatrix4(camera.matrixWorld);
+        for (const depth of [0, 2 * R]) { lo.min(BOX_Q.copy(p).addScaledVector(forward, depth)); hi.max(BOX_Q); }
+      }
+      // размер — целыми метрами: от мелких сдвигов кадра (параллакс) частицы не перескакивают
+      C.uBoxMin.value.set(Math.floor(lo.x - 2), Math.floor(lo.y - 1), Math.floor(lo.z - 1));
+      C.uBoxSize.value.set(Math.ceil(hi.x - lo.x + 5), Math.ceil(hi.y - lo.y + 5), Math.ceil(hi.z - lo.z + 3));
+    } else {
+      C.uBoxMin.value.set(cam.x - R, cam.y - 5, cam.z - R);
+      C.uBoxSize.value.set(R * 2, H, R * 2);
+    }
+    this.rainMat.uniforms.uRadius.value = flat ? 1e5 : SETTINGS.rain.radius;
+    this.snowMat.uniforms.uRadius.value = flat ? 1e5 : SETTINGS.snow.radius;
+    this.splashMat.uniforms.uRadius.value = flat ? 1e5 : SETTINGS.rain.radius * .7;
     C.uSceneDepth.value = sceneDepth;
-    C.uNearFar.value.set(camera.near, camera.far);
+    const pe = camera.projectionMatrix.elements;
+    C.uProjZ.value.set(pe[10], pe[14], pe[11], pe[15]);
     this.#updateHeightMap(renderer, worldScene, camera);
     renderer.setRenderTarget(target);
     renderer.setClearColor(0x000000, 0);

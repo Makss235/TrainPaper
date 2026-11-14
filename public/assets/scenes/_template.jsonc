@@ -12,6 +12,7 @@
   "environment": {
     "azimuth": 250,                                   // куда по компасу смотрит ось −z — от этого солнце и тени
     "weather": "partly",
+    "planes": true,                                   // изредка высоко пролетает самолёт со шлейфом
     "shadows": { "x": [-18, 18], "y": [-1, 14], "z": [14, -110] }   // где считать тени (меньше — чётче)
   },
   "objects": [
@@ -31,10 +32,10 @@
     { "name": "Контактная сеть", "position": [7.06, 0, -30],
       "components": [{ "type": "Model", "model": "station/catenary", "params": { "tracks": [-2.64], "count": 14 } }] },
 
-    // платформа 200 м от z = 6
+    // платформа 100 м от z = 6: её конец виден из основного ракурса
     { "name": "Платформа", "position": [-0.85, 0, 6],
-      "components": [{ "type": "Model", "model": "station/platform", "params": { "length": 200, "width": 6.7 }, "castShadow": false }] },
-    { "name": "Фонарь", "prefab": "lamp", "position": [-3.56, 1.1, -14], "repeat": { "count": 8, "step": [0, 0, -24] } },
+      "components": [{ "type": "Model", "model": "station/platform", "params": { "length": 100, "width": 6.7 }, "castShadow": false }] },
+    { "name": "Фонарь", "prefab": "lamp", "position": [-3.56, 1.1, -14], "repeat": { "count": 4, "step": [0, 0, -24] } },
     { "name": "Табло", "prefab": "departure-board", "position": [-1.8, 1.1, -6.3] },
 
     // заготовка здания (потом — модель из Blender: { "type": "Model", "model": "tver/station.glb" })

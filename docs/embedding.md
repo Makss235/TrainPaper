@@ -45,8 +45,7 @@
 ```
 
 Контейнеру нужен размер и `position: relative` (или `absolute`): холст встаёт в него с `position: absolute; inset: 0`.
-При изменении размера окна движок подстраивается сам. Если контейнер меняет размер без изменения окна —
-вызовите `engine.resize()`.
+При изменении размера окна или самого контейнера движок подстраивается сам (`ResizeObserver`).
 
 ## 3. Параметры `new Engine({...})`
 
@@ -75,17 +74,20 @@ new Engine({ quality: { pixelRatio: 1, msaa: 2, shadowSize: 1024, maxFps: 30, sk
 
 | Ключ | Что | По умолчанию |
 |---|---|---|
-| `pixelRatio` | предел плотности пикселей (на 4K-экране хватает 1) | 1,5 |
+| `pixelRatio` | предел плотности пикселей | 1,5 |
+| `maxPixels` | потолок числа пикселей кадра: больший экран считается в меньшем разрешении и растягивается (0 — без потолка) | 5 000 000 |
 | `msaa` | сглаживание краёв (0 — выкл.) | 4 |
 | `skyScale` | разрешение неба относительно экрана | 0,5 |
-| `shadowSize` | размер карты теней | 2048 |
+| `shadowSize` | карта теней солнца: короткая сторона (длинная вдвое больше — вдоль длинной стороны области теней) | 2048 |
 | `maxFps` | потолок кадров, пока что-то движется | 60 |
+| `sunFps` | как часто пересчитывать свет и тени при ускоренном небе («сутки за минуту») | 24 |
 | `skyFps` | как часто перерисовывать облака (0 — облака стоят) | 12 |
+| `starsFps` | как часто обновлять мерцание звёзд ночью (0 — звёзды не мерцают) | 8 |
 | `precipFps` | частота кадров осадков | 40 |
 | `precipScale` | разрешение слоя осадков | 1 |
 | `powerPreference` | какую видеокарту просить у браузера | `"low-power"` |
 
-Для слабых устройств: `pixelRatio: 1, msaa: 0, shadowSize: 1024, skyFps: 6, precipFps: 24`.
+Для слабых устройств: `pixelRatio: 1, maxPixels: 2e6, msaa: 0, shadowSize: 1024, sunFps: 12, skyFps: 6, precipFps: 24`.
 
 ### Стиль (`style`)
 
@@ -126,8 +128,10 @@ import { Component, registerComponent } from "/engine/index.js";
 class Spin extends Component {
   static type = "Spin";
   static props = { speed: { type: "number", default: 30, doc: "°/с" } };
-  start() {
-    this.animate((now, dt) => { this.object3D.rotation.y += this.props.speed * Math.PI / 180 * dt; this.gameObject.moved(); }, 30);
+  static fps = 30;                                  // update не чаще 30 раз в секунду
+  update(dt) {                                      // dt — секунды симуляции; this.sleep() — перестать рисовать кадры
+    this.object3D.rotation.y += this.props.speed * Math.PI / 180 * dt;
+    this.gameObject.moved();
   }
 }
 registerComponent(Spin);

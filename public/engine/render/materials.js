@@ -2,7 +2,7 @@
 // плоские грани своим тоном, тени от солнца, дымка, ночные огни. Шейдер — render/shaders.js.
 // У каждого движка свои материалы (они ссылаются на его uniforms освещения): engine.materials.toon({...}).
 //
-//   toon({ color: "platform" })                  — ровный цвет (имя палитры или "#rrggbb")
+//   toon({ color: "floor" })                     — ровный цвет (имя палитры или "#rrggbb")
 //   toon({ vertexColors: true })                 — цвет у вершин (склеенные детали)
 //   toon({ map: texture })                       — текстура
 //   toon({ color: "#4f7a4a", toon: true })       — гладкое тело в два тона (кроны)
@@ -31,17 +31,19 @@ import { TOON_FRAGMENT, TOON_VERTEX } from "./shaders.js";
  * @property {string|number[]} [emissiveNight]  свечение ночью
  * @property {string|number[]} [litNight]       подсветка изнутри ночью (умножается на цвет — надписи читаются)
  * @property {boolean} [receive]         принимает тени (по умолчанию да)
- * @property {boolean} [patternShadows]  принимает тени-узоры ограды
+ * @property {boolean} [cardLight]       плоская картинка: солнце освещает её с обеих сторон (спрайты 2D-сцен)
+ * @property {boolean} [nightOnly]       слой виден только ночью — проявляется вместе с фонарями (свет в окнах)
+ * @property {boolean} [patternShadows]  принимает тени-узоры решёток (StripeShadow)
  * @property {boolean} [wet]             мокнет в дождь
  * @property {boolean} [snow]            покрывается снегом сверху
  * @property {number} [offset]           сдвиг глубины (для наклеек и стёкол)
  * @property {boolean} [depthWrite]
- * @property {{type: "tiles"|"sleepers"|"stripes"|"bars", [k: string]: any}} [pattern]
+ * @property {{type: "tiles"|"slats"|"stripes"|"bars", [k: string]: any}} [pattern]
  *   tiles: { step: [0.6, 0.6], width: 0.02, fade: 70, color } — швы плитки по мировым x и z;
- *   sleepers: { half: 1.35, step: 0.55, width: 0.26, color } — шпалы; координаты — uv поверхности
- *     в метрах (u — поперёк пути от оси, v — вдоль): kit.plane(size, { uvMeters: true });
+ *   slats: { half: 1.35, step: 0.55, width: 0.26, color } — поперечные планки на полосе (настил, ступени); координаты — uv поверхности
+ *     в метрах (u — поперёк полосы от её оси, v — вдоль): kit.plane(size, { uvMeters: true });
  *   stripes: { step, width, strength, color } — полосы по координате u поверхности (в её единицах:
- *     у коробки kit.box u идёт 0…1 по грани) — гофра, рёбра; едут вместе с объектом;
+ *     у коробки kit.box u идёт 0…1 по грани) — рифление, рёбра; едут вместе с объектом;
  *   bars: { step: 0.14, width: 0.02, color } — прутья: прозрачность по узору вдоль z.
  */
 
@@ -87,6 +89,8 @@ export class Materials {
     if (opts.glass) defines.GLASS = "";
     if (opts.receive !== false && !opts.glass) defines.RECEIVE = "";
     if (opts.patternShadows) defines.PATTERN_SHADOWS = "";
+    if (opts.cardLight) defines.CARD_LIGHT = "";
+    if (opts.nightOnly) defines.NIGHT_ONLY = "";
     if (opts.wet) defines.WET = "";
     if (opts.snow) defines.SNOW = "";
     let transparent = !!opts.transparent || (opts.opacity ?? 1) < 1;
@@ -96,8 +100,8 @@ export class Materials {
       if (p.type === "tiles") {
         defines.PAT_TILES = "";
         uniforms.uPat = { value: new THREE.Vector4(p.step?.[0] ?? .6, p.step?.[1] ?? .6, p.width ?? .02, p.fade ?? 70) };
-      } else if (p.type === "sleepers") {
-        defines.PAT_SLEEPERS = "";
+      } else if (p.type === "slats") {
+        defines.PAT_SLATS = "";
         uniforms.uPat = { value: new THREE.Vector4(p.x ?? 0, p.half ?? 1.35, p.step ?? .55, p.width ?? .26) };
       } else if (p.type === "stripes") {
         defines.PAT_STRIPES = "";
@@ -132,6 +136,15 @@ export class Materials {
     let m = this.cache.get(key);
     if (!m) { m = this.create(opts); this.cache.set(key, m); }
     return m;
+  }
+
+  /** Освободить все материалы (движок удаляется). */
+  dispose() {
+    for (const m of this.cache.values()) m.dispose();
+    this.cache.clear();
+    this.lineMaterial?.dispose();
+    this.glowMaterial?.dispose();
+    this.lineMaterial = this.glowMaterial = null;
   }
 
   /** Материал тонких линий (render/lines.js). */

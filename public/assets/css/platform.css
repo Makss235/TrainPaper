@@ -67,3 +67,6 @@
   background: rgba(255,255,255,.06); color: inherit; font: inherit; cursor: pointer; }
 .dev button.on { background: #e21a1a; border-color: #e21a1a; }
 .dev pre { margin: 6px 0 0; white-space: pre-wrap; color: #b9c4d3; }
+
+/* панель с поездом видна только у плоского вида «Вагон»; табло-экран там не нужен */
+#poster:not(.view-2d) #info { display: none; }

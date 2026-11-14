@@ -35,10 +35,11 @@ function cachedMarks(nowMs, lat, lon, offset) {
 /**
  * view: {
  *   name: "flat" | "platform",
- *   clock                              — необязательно: часы симуляции движка { time: engine.time, tween: o => engine.tween(o) }.
- *                                        Тогда режимы времени суток управляют часами: «сутки за минуту» — time.scale = 1440,
- *                                        «рассвет», «день»… — плавный перевод часов (tween) к нужному моменту; дальше часы идут
- *                                        как обычно. Вместе с небом ускоряются таймеры скриптов и движение поездов.
+ *   clock                              — необязательно: часы и небо движка { time: engine.time, sky: engine.environment,
+ *                                        tween: o => engine.tween(o) }. Тогда режимы времени суток двигают только небо:
+ *                                        «сутки за минуту» — sky.skyScale = 1440, «рассвет», «день»… — плавный сдвиг неба
+ *                                        (sky.skyShift) к нужному моменту. Часы сцены идут как шли: поезда, расписание
+ *                                        и таймеры скриптов не ускоряются и не сдвигаются.
  *                                        Без clock (вид «Вагон») — своё «показанное» время, как раньше.
  *   sky(env, sky, info, moment)        — каждый кадр, пока небо меняется: солнце, луна, градиент, облака;
  *                                        moment — показанный момент (мс), с учётом предпросмотра
@@ -46,10 +47,11 @@ function cachedMarks(nowMs, lat, lon, offset) {
  *   train(current, list, board, info)  — сменился поезд у платформы (или табло обновилось)
  *   tick(now, current, list, info)     — раз в секунду: обратный отсчёт, часы
  *   uiExtras                           — необязательно: дополнительные группы панели настроек (см. ui.js)
+ *   views                              — необязательно: группа «Вид» переключает вид на месте { key, options } (см. ui.js)
  * }
  */
 export function startApp(view) {
-  const ui = createUI(document.getElementById("ui"), { view: view.name, extras: view.uiExtras || [] });
+  const ui = createUI(document.getElementById("ui"), { view: view.name, extras: view.uiExtras || [], views: view.views || null });
   const source = new BoardSource();
   const info = { id: null, name: "", rzdName: "", lat: 55.75, lon: 37.62, utcOffset: 180, demo: false, stale: false };
   let board = null, currentKey = undefined, pollTimer = 0, loadId = 0;
@@ -123,11 +125,21 @@ export function startApp(view) {
     view.tick(now, current, list, info);
   }
 
+  /** Момент с выбранным ползунком временем суток (минуты от полуночи по времени станции) — ближайший к near. */
+  function manualMoment(near) {
+    const offset = info.utcOffset * 60000, dayStart = Math.floor((near + offset) / DAY_MS) * DAY_MS - offset;
+    const t = dayStart + settings().time * 60000;
+    return [t - DAY_MS, t, t + DAY_MS].reduce((a, b) => (Math.abs(b - near) < Math.abs(a - near) ? b : a));
+  }
+  /** Сколько минут от полуночи по времени станции в момент ms. */
+  const minutesOf = ms => Math.floor(((ms + info.utcOffset * 60000) % DAY_MS + DAY_MS) % DAY_MS / 60000);
+
   /** Момент, который должен быть на небе в выбранном режиме. */
   function goal(nowMs) {
     const mode = settings().tod;
     if (mode === "auto") return nowMs;
     if (mode === "cycle") return cycleBase + (performance.now() - cycleStart) * CYCLE_SPEED;
+    if (mode === "manual") return manualMoment(shown ?? nowMs);
     const m = cachedMarks(nowMs + dayShift, info.lat, info.lon, info.utcOffset);
     const t = { dawn: m.sunrise + 12 * 60000, day: m.noon, dusk: m.sunset - 12 * 60000, night: m.midnight }[mode];
     if (shown == null) return t;
@@ -162,6 +174,7 @@ export function startApp(view) {
     if (clock !== lastClock) {
       lastClock = clock;
       ui.setClock(localTime(shown, info.utcOffset), env.phase.label, settings().tod !== "auto");
+      ui.setTime(minutesOf(shown));
     }
     const skyKey = `${sky.sun.altitude.toFixed(3)}|${sky.sun.azimuth.toFixed(3)}|${sky.moon ? sky.moon.azimuth.toFixed(2) : ""}`;
     if (force || skyKey !== lastSkyKey) {
@@ -177,45 +190,53 @@ export function startApp(view) {
     }
   }
 
-  // ---------- часы движка (вид «Платформа») ----------
+  // ---------- небо движка (вид «Платформа») ----------
+  // Режимы времени суток двигают только небо (сдвиг и скорость неба относительно часов сцены): солнце, луна, свет
+  // и тени меняются, а поезда, расписание и таймеры живут по часам сцены — те идут как шли.
 
-  /** Перевести часы к моменту target плавно (tween по реальному времени), дальше идут как обычно. */
+  /** Перевести небо к моменту target плавно (tween по реальному времени), дальше оно идёт вместе с часами. */
   function clockTo(target, instant = false) {
-    const T = clock.time;
+    const S = clock.sky, T = clock.time;
     clockTween?.abort();
     clockTween = null;
-    const from = T.ms, distance = Math.abs(target - from);
-    T.scale = 1;
-    if (instant || distance < 1000) { T.set(target); return; }
+    S.skyScale = 1;
+    // «Сутки за минуту» могли увести небо на много дней вперёд. Целые сутки сбрасываются сразу (солнце в то же
+    // время суток стоит там же), а плавно идёт только остаток — не больше полусуток, коротким путём.
+    // Иначе возврат в «Авто» отматывал бы назад все накрученные дни.
+    const days = Math.round((S.time - target) / DAY_MS) * DAY_MS;
+    if (days) S.skyShift -= days;
+    const from = S.skyShift, to = target - T.ms, distance = Math.abs(to - from);
+    if (instant || distance < 1000) { S.skyShift = to; return; }
     const ac = (clockTween = new AbortController());
     const dur = Math.min(4500, Math.max(1400, distance / (12 * 3600000) * 4200));
-    clock.tween({ from, to: target, duration: dur / 1000, ease: "inOutCubic", signal: ac.signal, onUpdate: v => T.set(v) })
+    clock.tween({ from, to, duration: dur / 1000, ease: "inOutCubic", signal: ac.signal, onUpdate: v => { S.skyShift = v; } })
       .then(() => { if (clockTween === ac) clockTween = null; }, () => {});
   }
 
-  /** Момент для режима tod относительно того, что сейчас на часах. */
+  /** Момент для режима tod относительно того, что сейчас на небе. */
   function clockGoal(mode) {
     const now = Date.now();
     if (mode === "auto") return now;
-    const cur = clock.time.ms;
+    const cur = clock.sky.time;
+    if (mode === "manual") return manualMoment(cur);
     const m = cachedMarks(cur, info.lat, info.lon, info.utcOffset);
     const t = { dawn: m.sunrise + 12 * 60000, day: m.noon, dusk: m.sunset - 12 * 60000, night: m.midnight }[mode] ?? now;
     // из t−сутки, t, t+сутки — ближайший к показанному: переход идёт коротким путём
     return [t - DAY_MS, t, t + DAY_MS].reduce((a, b) => (Math.abs(b - cur) < Math.abs(a - cur) ? b : a));
   }
 
-  /** Режим времени суток → часы. */
+  /** Режим времени суток → небо. */
   function applyClockMode(first = false) {
-    const mode = settings().tod, T = clock.time;
-    if (mode === "cycle") { clockTween?.abort(); clockTween = null; T.scale = CYCLE_SPEED; return; }
+    const mode = settings().tod;
+    if (mode === "cycle") { clockTween?.abort(); clockTween = null; clock.sky.skyScale = CYCLE_SPEED; return; }
     clockTo(clockGoal(mode), first || noMotion());
   }
 
   const noMotion = () => /[?&]anim=0/.test(location.search);
 
-  /** Подпись часов и место на небе (часы движок ведёт сам). */
+  /** Подпись часов (момент, который сейчас на небе) и место на Земле. */
   function frameClock(force = false) {
-    const ms = clock.time.ms;
+    const ms = clock.sky.time;
     const sky = celestial(new Date(ms), info.lat, info.lon);
     const env = environment(sky.sun.altitude, sky.rising);
     const label = `${localTime(ms, info.utcOffset)}|${env.phase.label}|${settings().tod}`;
@@ -223,6 +244,7 @@ export function startApp(view) {
       lastClock = label;
       ui.setClock(localTime(ms, info.utcOffset), env.phase.label, settings().tod !== "auto");
     }
+    ui.setTime(minutesOf(ms));
     const place = `${info.lat},${info.lon}`;
     if (force || place !== lastPlace) {
       const moved = lastPlace !== "";
@@ -238,10 +260,11 @@ export function startApp(view) {
     if ("station" in patch && patch.station !== info.id) return applyStation(s.station);
     if ("suburban" in patch) return refresh();
     if ("filter" in patch) pick(true);
-    if ("tod" in patch && clock) {
-      applyClockMode();
+    if (("tod" in patch || "time" in patch) && clock) {
+      // ползунок — без плавного перехода: небо идёт за ним сразу
+      applyClockMode("time" in patch);
       frameClock(true);
-    } else if ("tod" in patch) {
+    } else if ("tod" in patch || "time" in patch) {
       cycleStart = performance.now();
       cycleBase = shown ?? Date.now();               // «сутки за минуту» продолжают с того, что уже на небе
       dayShift = shown == null ? 0 : Math.round((shown - Date.now()) / DAY_MS) * DAY_MS;
@@ -254,7 +277,7 @@ export function startApp(view) {
   applyStation(settings().station);
   setInterval(() => pick(), 1000);
   if (clock) {
-    // небо, свет и солнце движок считает сам по своим часам — здесь только режим и подпись часов
+    // небо, свет и солнце движок считает сам — здесь только режим и подпись часов
     applyClockMode(true);
     frameClock(true);
     setInterval(() => frameClock(), 250);

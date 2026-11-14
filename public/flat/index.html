@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Вагон — TrainPaper</title>
+  <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
+  <!-- Вид «Вагон» теперь рисует движок: это 2D-вид страницы «Платформа» (плоский вид сбоку, ортографическая камера).
+       Прежний адрес /flat/ ведёт туда же, параметры адреса сохраняются. Прежняя SVG-иллюстрация — classic.html. -->
+  <script>
+    const params = new URLSearchParams(location.search);
+    params.set("view", "2d");
+    location.replace("../platform/?" + params);
+  </script>
+</head>
+<body>
+<noscript><a href="../platform/?view=2d">Вид «Вагон»</a></noscript>
+</body>
+</html>

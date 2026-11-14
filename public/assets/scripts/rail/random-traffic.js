@@ -4,6 +4,8 @@
 //   { "type": "rail/random-traffic", "consists": ["freight"], "tracks": ["Путь 2"], "every": [240, 720], "speed": [15, 25] }
 //
 // direction: 1 или −1 — куда идут поезда по пути (к росту s или обратно), 0 — случайно.
+// При сильно ускоренных часах сцены (engine.time.scale) поезда не пускаются: каждый промелькнул бы за долю секунды,
+// а собирать по несколько составов в секунду дорого (maxScale).
 // Поезда ведёт TrainManager сцены: на занятом пути следующий ждёт в очереди.
 // @ts-check
 import { Script } from "../../../engine/index.js";
@@ -17,6 +19,7 @@ export default class RandomTraffic extends Script {
     speed: { type: "vec2", default: [15, 25], doc: "Скорость, м/с — случайно в диапазоне" },
     direction: { type: "number", default: 1, doc: "1 — к росту s пути, −1 — обратно, 0 — случайно" },
     first: { type: "number", default: 40, min: 0, doc: "Через сколько секунд первый поезд" },
+    maxScale: { type: "number", default: 30, min: 1, doc: "При ускорении времени больше этого поезда не пускаются" },
     manager: { type: "component", component: "TrainManager", default: null, doc: "Менеджер поездов (по умолчанию — первый в сцене)" },
   };
   static actions = { "Пустить поезд": "send" };
@@ -25,7 +28,7 @@ export default class RandomTraffic extends Script {
   async start() {
     await this.wait(this.props.first);
     while (true) {
-      this.send();
+      if (this.time.scale <= this.props.maxScale) this.send();
       const [a, b] = this.props.every;
       await this.wait(a + Math.random() * (b - a));
     }

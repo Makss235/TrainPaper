@@ -1,7 +1,7 @@
-// Свет: источник (фонарь, прожектор, направленная подсветка) и тень-узор ограды.
+// Свет: источник (фонарь, прожектор, направленная подсветка) и тень-узор решётки.
 //
 //   { "type": "Light", "range": 11, "intensity": 1.15, "offset": [1.0, 4.7, 0] }                      // фонарь, ночью
-//   { "type": "Light", "kind": "spot", "target": "Платформа", "angle": 40, "penumbra": 0.3, "range": 25, "castShadow": true }
+//   { "type": "Light", "kind": "spot", "target": "Сцена", "angle": 40, "penumbra": 0.3, "range": 25, "castShadow": true }
 //   { "type": "Light", "kind": "directional", "direction": [1, -0.3, 0.2], "intensity": 0.25, "mode": "always" }  // контровой свет
 //
 //   const lamp = go.getComponent("Light");
@@ -29,7 +29,6 @@ export class Light extends Component {
     fade: { type: "number", default: 0, min: 0, doc: "Плавность turnOn/turnOff по умолчанию, с" },
     castShadow: { type: "boolean", default: false, doc: "Тень (только spot; не больше quality.maxShadowLights таких источников)" },
     offset: { type: "vec3", default: [0, 0, 0], doc: "Где источник внутри объекта, м" },
-    night: { type: "boolean", default: null, doc: "Устарело: true — mode \"night\", false — mode \"always\"" },
   };
   static actions = { "Включить": "turnOn", "Выключить": "turnOff" };
 
@@ -39,10 +38,6 @@ export class Light extends Component {
   #fading = null;
 
   awake() {
-    if (this.props.night != null) {
-      this.props.mode = this.props.night ? "night" : "always";
-      this.props.night = null;
-    }
     this.level = this.props.on ? 1 : 0;
   }
 
@@ -57,7 +52,6 @@ export class Light extends Component {
 
   start() { this.engine.lights.add(this); }
   onChange(keys) {
-    if (keys.includes("night") && this.props.night != null) { this.props.mode = this.props.night ? "night" : "always"; this.props.night = null; }
     if (keys.includes("on") && !this.#fading) this.level = this.props.on ? 1 : 0;
     this.#changed();
   }
@@ -122,7 +116,7 @@ export class Light extends Component {
 export class StripeShadow extends Component {
   static type = "StripeShadow";
   static category = "Свет";
-  static doc = "Тень решётки (ограды) узором: считается в шейдере пола, без муара. Плоскость решётки — вдоль оси z объекта (не поворачивайте объект). Не больше двух на сцену.";
+  static doc = "Тень решётки (забор, перила, жалюзи) узором: считается в шейдере пола, без муара. Плоскость решётки — вдоль оси z объекта (не поворачивайте объект). Не больше двух на сцену.";
   static props = {
     length: { type: "number", default: 100, min: 0, doc: "Длина решётки от объекта в сторону −z, м" },
     bottom: { type: "number", default: .12, doc: "Низ прутьев над объектом, м" },
@@ -131,8 +125,8 @@ export class StripeShadow extends Component {
     bar: { type: "number", default: .02, min: .001, doc: "Толщина прута, м" },
     postStep: { type: "number", default: 2.5, min: .1, doc: "Шаг стоек, м" },
     post: { type: "number", default: .06, doc: "Толщина стойки, м" },
-    rails: { type: "vec2", default: [1.12, .12], doc: "Высоты двух перил над объектом, м" },
-    railWidth: { type: "number", default: .05, doc: "Толщина перил, м" },
+    crossbars: { type: "vec2", default: [1.12, .12], doc: "Высоты двух поперечин над объектом, м" },
+    crossbarWidth: { type: "number", default: .05, doc: "Толщина поперечин, м" },
   };
 
   start() { this.engine.lights.addPattern(this); }
@@ -146,7 +140,7 @@ export class StripeShadow extends Component {
     const e = o.matrixWorld.elements, x = e[12], y = e[13], z = e[14];
     return {
       x, y0: y + p.bottom, y1: y + p.top, step: p.step, bar: p.bar, postStep: p.postStep, post: p.post,
-      rail: p.railWidth / 2, rails: [y + p.rails[0], y + p.rails[1]], from: z, to: z - p.length,
+      crossbar: p.crossbarWidth / 2, crossbars: [y + p.crossbars[0], y + p.crossbars[1]], from: z, to: z - p.length,
     };
   }
 }

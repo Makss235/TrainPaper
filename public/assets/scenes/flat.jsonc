@@ -1,0 +1,149 @@
+// «Вагон» — плоская 2D-сцена: только спрайты (стилизованные картинки из assets/img/sprites/), слоями.
+// Так выглядят обои, когда выбран вид «Вагон»: хвост поезда в правом нижнем углу, панель с поездом — в левом
+// верхнем (HTML, platform/index.html), остальное — свободное небо. Сцена одна для всех станций.
+//
+// Координаты — как на листе бумаги: x — вправо, y — вверх (0 — головка рельса, пол платформы — 1,1),
+// z — глубина слоя: чем больше, тем ближе к зрителю. Камера ортографическая, смотрит вдоль −z; торец хвостового
+// вагона стоит в x = 0. Каждый спрайт — объект с компонентом Sprite ("billboard": "none" — лежит в плоскости листа);
+// размеры картинок в метрах — в assets/img/sprites/sprites.json (их печатает tools/make-sprites.mjs).
+// За курсором слои сдвигаются (CameraParallax.layers): ближние сильнее, дальние почти стоят — ничего не поворачивается.
+{
+  "name": "Вагон",
+  "environment": {
+    "azimuth": 200,                                   // смотрим на юго-юго-запад: солнце днём проходит через кадр слева направо
+    "weather": "partly",
+    "clouds": false,                                  // облака — свои спрайты, а не облака движка
+    "planes": true,                                   // изредка высоко пролетает самолёт со шлейфом
+    "fog": { "near": 300, "far": 4000 }               // дальние слои уже нарисованы «в дымке»
+  },
+  "post": [{ "type": "vignette", "amount": 0.16 }, { "type": "grain", "amount": 0.035 }],
+  "objects": [
+    // кадр вмещает 30 × 16,9 м. center: ось камеры (x = 0 — торец вагона, y = 1,1 — пол платформы) приходится на 62 % ширины
+    // и 90,5 % высоты экрана — поезд и платформа прижаты к правому нижнему углу. fov — каким объективом показано небо.
+    { "name": "Камера", "position": [0, 1.1, 30],
+      "components": [{ "type": "Camera", "main": true, "label": "Вагон", "projection": "orthographic", "size": [30, 16.9], "center": [0.62, 0.905],
+                       "fov": 75, "near": 0.5, "far": 400, "portrait": { "size": [14, 25], "center": [0.42, 0.93] } },
+                     { "type": "CameraParallax", "shift": [0, 0], "turn": [0, 0], "layers": [0.006, 0.0022], "focus": 110 }] },
+
+    // ---------- небо: облака плывут по ветру; какие и сколько — по погоде ----------
+    // Метка облака — при какой погоде оно появляется: "light" — лёгкие (видны и в ясный день), "wisp" — перистые полоски
+    // (только пока небо не затянуто), "fair" — кучевые (переменная облачность и больше), "heavy" — тяжёлые (облачно,
+    // пасмурно, осадки). В пасмурную погоду облака
+    // сереют, под дождём темнеют, плывут по ветру погоды (скрипт assets/scripts/flat/cloud-field.js).
+    // Поле облаков — правее панели с поездом (левый верхний угол остаётся чистым): у края поля облако тает,
+    // а новое проявляется с другой стороны, за правым краем кадра.
+    // Тяжёлые облака стоят чуть дальше остальных (z меньше) и непрозрачны — перекрываются аккуратно, слоями.
+    { "name": "Облака", "position": [0, 0, -80], "components": [{ "type": "flat/cloud-field", "speed": 0.1, "span": [-3, 54], "fade": 7 }],
+      "children": [
+        { "name": "Облако 1", "static": false, "tags": ["light"], "position": [12.5, 10.4, 1],
+          "components": [{ "type": "Sprite", "texture": "img/sprites/cloud-2.svg", "size": [5.14, 2.22], "anchor": [0.5, 0], "billboard": "none", "haze": 0, "opacity": 0.97 }] },
+        { "name": "Облако 2", "static": false, "tags": ["light"], "position": [26, 9.3, 1],
+          "components": [{ "type": "Sprite", "texture": "img/sprites/cloud-1.svg", "size": [4, 1.96], "anchor": [0.5, 0], "billboard": "none", "haze": 0, "opacity": 0.95 }] },
+        { "name": "Облако 3", "static": false, "tags": ["light"], "position": [41, 9.9, 1],
+          "components": [{ "type": "Sprite", "texture": "img/sprites/cloud-3.svg", "size": [4.64, 2.62], "anchor": [0.5, 0], "billboard": "none", "haze": 0, "opacity": 0.95 }] },
+        { "name": "Облако 4", "static": false, "tags": ["wisp"], "position": [16, 11.9, 2],
+          "components": [{ "type": "Sprite", "texture": "img/sprites/cloud-10.svg", "size": [9.7, 0.82], "anchor": [0.5, 0], "billboard": "none", "haze": 0, "opacity": 0.9 }] },
+        { "name": "Облако 5", "static": false, "tags": ["wisp"], "position": [36, 11.4, 2],
+          "components": [{ "type": "Sprite", "texture": "img/sprites/cloud-11.svg", "size": [6.4, 0.64], "anchor": [0.5, 0], "billboard": "none", "haze": 0, "opacity": 0.85 }] },
+        { "name": "Облако 6", "static": false, "tags": ["fair"], "position": [4, 8.3, 0],
+          "components": [{ "type": "Sprite", "texture": "img/sprites/cloud-4.svg", "size": [7.88, 3.13], "anchor": [0.5, 0], "billboard": "none", "haze": 0, "opacity": 1 }] },
+        { "name": "Облако 7", "static": false, "tags": ["fair"], "position": [18, 9.3, 0],
+          "components": [{ "type": "Sprite", "texture": "img/sprites/cloud-6.svg", "size": [6.84, 3.22], "anchor": [0.5, 0], "billboard": "none", "haze": 0, "opacity": 1 }] },
+        { "name": "Облако 8", "static": false, "tags": ["fair"], "position": [33, 8.3, 0],
+          "components": [{ "type": "Sprite", "texture": "img/sprites/cloud-5.svg", "size": [9.97, 3.16], "anchor": [0.5, 0], "billboard": "none", "haze": 0, "opacity": 1 }] },
+        { "name": "Облако 9", "static": false, "tags": ["fair"], "position": [47, 10.0, 0],
+          "components": [{ "type": "Sprite", "texture": "img/sprites/cloud-7.svg", "size": [12.53, 2.43], "anchor": [0.5, 0], "billboard": "none", "haze": 0, "opacity": 0.96 }] },
+        { "name": "Облако 10", "static": false, "tags": ["heavy"], "position": [11, 7.7, -1],
+          "components": [{ "type": "Sprite", "texture": "img/sprites/cloud-8.svg", "size": [13.74, 4.35], "anchor": [0.5, 0], "billboard": "none", "haze": 0, "opacity": 1 }] },
+        { "name": "Облако 11", "static": false, "tags": ["heavy"], "position": [29.5, 7.3, -2],
+          "components": [{ "type": "Sprite", "texture": "img/sprites/cloud-9.svg", "size": [15.67, 3.54], "anchor": [0.5, 0], "billboard": "none", "haze": 0, "opacity": 1 }] },
+        { "name": "Облако 12", "static": false, "tags": ["heavy"], "position": [21, 10.0, -1],
+          "components": [{ "type": "Sprite", "texture": "img/sprites/cloud-7.svg", "size": [12.53, 2.43], "anchor": [0.5, 0], "billboard": "none", "haze": 0, "opacity": 1 }] },
+        { "name": "Облако 13", "static": false, "tags": ["heavy"], "position": [46, 7.6, -2],
+          "components": [{ "type": "Sprite", "texture": "img/sprites/cloud-8.svg", "size": [12.64, 4.0], "anchor": [0.5, 0], "billboard": "none", "haze": 0, "opacity": 1 }] }
+      ] },
+
+    // ---------- дальний план: низкие силуэты у линии платформы ----------
+    { "name": "Город", "position": [-6, 1.05, -70],
+      "components": [{ "type": "Sprite", "texture": "img/sprites/skyline.svg", "size": [144, 2.6], "repeat": [3, 1], "anchor": [0.5, 0], "billboard": "none", "haze": 0 }] },
+    { "name": "Деревья", "position": [-9, 1.05, -45],
+      "components": [{ "type": "Sprite", "texture": "img/sprites/treeline.svg", "size": [96, 1.7], "repeat": [3, 1], "anchor": [0.5, 0], "billboard": "none", "haze": 0 }] },
+    // опора — в середине каждого пролёта картинки (40 м): одна стоит слева от вагона (x = −9,5), соседние — за краями кадра.
+    // Консоль опоры смотрит вправо (к вагону): на её конце — седло несущего троса, ниже — фиксатор контактного провода;
+    // трос провисает между опорами, под ним — ровный контактный провод со струнами
+    { "name": "Контактная сеть", "position": [-9.5, 1.1, -9],
+      "components": [{ "type": "Sprite", "texture": "img/sprites/catenary.svg", "size": [120, 8.9], "repeat": [3, 1], "anchor": [0.5, 0], "billboard": "none", "haze": 0 }] },
+
+    // ---------- поезд: хвостовой вагон, три следующих и локомотив в голове ----------
+    // FlatTrain двигает объект вдоль x: уходящий поезд уезжает вправо; следующий въезжает в кадр слева — сначала локомотив,
+    // за ним вагоны, — тормозит и встаёт торцом хвостового вагона в x = 0. Пока поезд стоит, в кадре только его хвост.
+    // Якорь спрайта вагона — торец кузова у его низа (0,29 м от левого края картинки, 0,71 м от нижнего).
+    { "name": "Поезд", "static": false, "position": [0, 0.95, 0],
+      "components": [{ "type": "FlatTrain", "plate": "Табличка", "arrive": 150, "arriveTime": 19, "depart": 36, "departTime": 6 }],
+      "children": [
+        { "name": "Вагон 1", "static": false,
+          "components": [{ "type": "Sprite", "texture": "img/sprites/coach-tail.svg", "size": [26.45, 4.3], "anchor": [0.011, 0.165], "billboard": "none", "haze": 0 }] },
+        { "name": "Окна 1", "static": false, "position": [0, 0, 0.02],
+          "components": [{ "type": "Sprite", "texture": "img/sprites/coach-tail-lights.svg", "size": [26.45, 4.3], "anchor": [0.011, 0.165], "billboard": "none", "haze": 0, "night": true, "glowNight": 1.15 }] },
+        { "name": "Вагон 2", "static": false, "position": [26.15, 0, 0],
+          "components": [{ "type": "Sprite", "texture": "img/sprites/coach.svg", "size": [26.45, 4.3], "anchor": [0.011, 0.165], "billboard": "none", "haze": 0 }] },
+        { "name": "Окна 2", "static": false, "position": [26.15, 0, 0.02],
+          "components": [{ "type": "Sprite", "texture": "img/sprites/coach-lights.svg", "size": [26.45, 4.3], "anchor": [0.011, 0.165], "billboard": "none", "haze": 0, "night": true, "glowNight": 1.15 }] },
+        { "name": "Вагон 3", "static": false, "position": [52.3, 0, 0],
+          "components": [{ "type": "Sprite", "texture": "img/sprites/coach.svg", "size": [26.45, 4.3], "anchor": [0.011, 0.165], "billboard": "none", "haze": 0 }] },
+        { "name": "Окна 3", "static": false, "position": [52.3, 0, 0.02],
+          "components": [{ "type": "Sprite", "texture": "img/sprites/coach-lights.svg", "size": [26.45, 4.3], "anchor": [0.011, 0.165], "billboard": "none", "haze": 0, "night": true, "glowNight": 1.15 }] },
+        { "name": "Вагон 4", "static": false, "position": [78.45, 0, 0],
+          "components": [{ "type": "Sprite", "texture": "img/sprites/coach.svg", "size": [26.45, 4.3], "anchor": [0.011, 0.165], "billboard": "none", "haze": 0 }] },
+        { "name": "Окна 4", "static": false, "position": [78.45, 0, 0.02],
+          "components": [{ "type": "Sprite", "texture": "img/sprites/coach-lights.svg", "size": [26.45, 4.3], "anchor": [0.011, 0.165], "billboard": "none", "haze": 0, "night": true, "glowNight": 1.15 }] },
+        // локомотив: торец его кузова — в 0,55 м от левого края картинки, низ картинки — головка рельса (объект поезда поднят на 0,95)
+        { "name": "Локомотив", "static": false, "position": [104.9, -0.95, 0],
+          "components": [{ "type": "Sprite", "texture": "img/sprites/loco.svg", "size": [23.6, 5.15], "anchor": [0.0233, 0], "billboard": "none", "haze": 0 },
+                         { "type": "Glow", "radius": 1.5, "color": "#fff1cf", "intensity": 1.3, "offset": [22.4, 2.5, 0.3] },
+                         { "type": "Glow", "radius": 0.7, "color": "#fff1cf", "intensity": 1.2, "night": false, "offset": [22.4, 2.5, 0.3] }] },
+        // маршрутная табличка в окне служебного купе (картинку рисует FlatTrain: маршрут, номер, путь)
+        { "name": "Табличка", "static": false, "position": [4.347, 1.757, 0.04],
+          "components": [{ "type": "Sprite", "size": [0.907, 0.363], "billboard": "none", "haze": 0, "glowNight": 0.8 }] },
+        // хвостовой сигнал
+        { "name": "Хвостовой огонь", "static": false, "position": [-0.11, 0.02, 0.2],
+          "components": [{ "type": "Glow", "radius": 0.55, "color": "#ff3a22", "intensity": 1.1 }] }
+      ] },
+
+    // ---------- ближний план: что стоит на платформе — зависит от её типа ----------
+    // Тип платформы выбирает приложение по станции (scenes/index.jsonc, поле flatPlatforms): включает объекты с меткой
+    // "platform:<тип>" и выключает остальные с меткой "platform:…". Типы: open — открытая платформа (фонарь, скамейка),
+    // canopy — вокзальная с навесом (колонны, кровля, светильники под ней), halt — остановочный пункт (павильон, фонарь).
+    // Объекты без метки — общие для всех типов.
+
+    // --- open: открытая платформа ---
+    // стойка фонаря — в 0,45 м от левого края картинки; свет и ореол — у светильника
+    { "name": "Фонарь", "position": [-2.6, 1.1, 3], "tags": ["platform:open", "platform:halt"],
+      "components": [
+        { "type": "Sprite", "texture": "img/sprites/lamp.svg", "size": [1.5, 5.9], "anchor": [0.3, 0], "billboard": "none", "haze": 0 },
+        { "type": "Light", "range": 13, "intensity": 1.25, "offset": [0.65, 5.2, 2.2] },
+        { "type": "Glow", "radius": 1.9, "color": "#ffebbd", "offset": [0.65, 5.66, 0.3] }] },
+    { "name": "Скамейка", "position": [-6.2, 1.1, 3.2], "tags": ["platform:open"],
+      "components": [{ "type": "Sprite", "texture": "img/sprites/bench.svg", "size": [2.1, 0.95], "anchor": [0.5, 0], "billboard": "none", "haze": 0 }] },
+
+    // --- canopy: вокзальная платформа с навесом ---
+    // навес начинается левее хвоста поезда и уходит вправо за кадр; небо слева остаётся открытым
+    { "name": "Навес", "position": [-6.4, 1.1, 3.4], "tags": ["platform:canopy"],
+      "components": [{ "type": "Sprite", "texture": "img/sprites/canopy.svg", "size": [44, 4.5], "anchor": [0, 0], "billboard": "none", "haze": 0 }] },
+    // светильники под кровлей (посередине между колоннами): свет на борт вагона и пол, ореолы
+    { "name": "Свет навеса 1", "position": [-0.2, 4.43, 3.4], "tags": ["platform:canopy"],
+      "components": [{ "type": "Light", "range": 10, "intensity": 1.05, "offset": [0, -0.2, 1.6] }, { "type": "Glow", "radius": 1.2, "color": "#ffebbd", "offset": [0, -0.08, 0.3] }] },
+    { "name": "Свет навеса 2", "position": [7.8, 4.43, 3.4], "tags": ["platform:canopy"],
+      "components": [{ "type": "Light", "range": 10, "intensity": 1.05, "offset": [0, -0.2, 1.6] }, { "type": "Glow", "radius": 1.2, "color": "#ffebbd", "offset": [0, -0.08, 0.3] }] },
+    { "name": "Скамейка под навесом", "position": [-1.6, 1.1, 3.2], "tags": ["platform:canopy"],
+      "components": [{ "type": "Sprite", "texture": "img/sprites/bench.svg", "size": [2.1, 0.95], "anchor": [0.5, 0], "billboard": "none", "haze": 0 }] },
+
+    // --- halt: остановочный пункт ---
+    { "name": "Павильон", "position": [-8.6, 1.1, 3.2], "tags": ["platform:halt"],
+      "components": [{ "type": "Sprite", "texture": "img/sprites/shelter.svg", "size": [5, 3.1], "anchor": [0.5, 0], "billboard": "none", "haze": 0 }] },
+
+    // пол платформы полосой у нижнего края кадра (верх картинки — кромка у пути)
+    { "name": "Платформа", "position": [-3, 1.13, 4],
+      "components": [{ "type": "Sprite", "texture": "img/sprites/platform.svg", "size": [84, 2.9], "repeat": [14, 1], "anchor": [0.5, 1], "billboard": "none", "haze": 0 }] }
+  ]
+}

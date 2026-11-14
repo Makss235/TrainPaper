@@ -6,7 +6,7 @@
 export default {
   name: "Платформа",
   params: {
-    length: { type: "number", default: 250, doc: "Длина, м" },
+    length: { type: "number", default: 100, doc: "Длина, м" },
     width: { type: "number", default: 6.7, doc: "Ширина, м" },
     height: { type: "number", default: 1.1, doc: "Высота пола над головкой рельса, м" },
     edges: { type: "array", default: ["+x"], doc: "Края к путям: [\"+x\"], [\"-x\"] или оба (островная)" },

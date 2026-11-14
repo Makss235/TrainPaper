@@ -4,7 +4,7 @@
 //                                            "three/addons/": "/vendor/three/addons/" } }</script>
 //   import { Engine } from "/engine/index.js";
 //   const engine = new Engine({ container: document.getElementById("view"), paths: { models: "/models/", prefabs: "/prefabs/" } });
-//   await engine.load("/scenes/station.jsonc");
+//   await engine.load("/scenes/main.jsonc");
 //
 // Подробно — docs/engine.md. Типы для подсказок (модели, скрипты, сцены) — engine/types.d.ts:
 //   /** @type {import("../../../engine/index.js").ModelDefinition} */ export default { … }
@@ -39,6 +39,7 @@ export { SHADOW_LAYER } from "./render/shadows.js";
 export { SURFACE_LAYER, markSurfaces } from "./environment/precipitation.js";
 export { applyVisualFlags } from "./components/visual.js";
 export { homography } from "./components/html-screen.js";
+export { celestial, solarPosition, moonPosition, moonIllumination } from "./environment/celestial.js";
 export { WEATHER, WEATHER_LABELS, BASE as WEATHER_BASE, fromWmo, wmoIntensity, mixWeather } from "./environment/weather.js";
 export { DEFAULT_QUALITY, DEFAULT_STYLE } from "./render/style.js";
 export { PostEffect, PostStack, FullscreenPass, registerPostEffect, getPostEffectClass, postEffectTypes } from "./render/post.js";

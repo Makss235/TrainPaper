@@ -1,12 +1,13 @@
 // Мурманск — северный тупиковый вокзал. Блокаут: сопки на горизонте, редкий низкорослый лес,
 // платформа с коротким навесом у здания вокзала, три пути. Камера чуть выше обычного.
-// Станция конечная: платформа 300 м; пути и сеть уходят к сопкам.
+// Платформа короткая, 120 м: её конец виден; дальше к сопкам уходят только пути и сеть.
 // Здание вокзала — заготовка; свою модель поставьте вместо объекта «Вокзал».
 {
   "name": "Мурманск",
   "environment": {
     "azimuth": 170,                                  // пути уходят на юг вдоль Кольского залива
     "weather": "partly",
+    "planes": true,                                   // изредка высоко пролетает самолёт со шлейфом
     "shadows": { "x": [-22, 20], "y": [-1, 12], "z": [16, -110] }
   },
   "objects": [
@@ -32,11 +33,11 @@
     { "name": "Сеть пути 1", "position": [7.0, 0, -26], "components": [{ "type": "Model", "model": "station/catenary", "params": { "tracks": [-2.58], "span": 55, "count": 14, "height": 9.8 } }] },
 
     { "name": "Платформа", "position": [-1.35, 0, 20],
-      "components": [{ "type": "Model", "model": "station/platform", "params": { "length": 300, "width": 7.7 }, "castShadow": false }] },
+      "components": [{ "type": "Model", "model": "station/platform", "params": { "length": 120, "width": 7.7 }, "castShadow": false }] },
     { "name": "Навес", "position": [-1.55, 1.1, 18],
       "components": [{ "type": "Model", "model": "station/canopy", "params": { "width": 6.7, "length": 64, "height": 3.9, "thickness": 0.26, "columns": [-2.35], "step": 8, "offset": 4 } }] },
     { "name": "Светильник навеса", "prefab": "canopy-lamp", "position": [-1.2, 5.0, 12], "repeat": { "count": 7, "step": [0, 0, -8] } },
-    { "name": "Фонарь", "prefab": "lamp", "position": [-4.6, 1.1, -52], "repeat": { "count": 11, "step": [0, 0, -22] },
+    { "name": "Фонарь", "prefab": "lamp", "position": [-4.6, 1.1, -52], "repeat": { "count": 3, "step": [0, 0, -22] },
       "components": [
         { "type": "Model", "params": { "height": 4.8, "arm": 0.9 } },
         { "type": "Light", "offset": [1.0, 4.3, 0] },
@@ -45,7 +46,7 @@
       "components": [{ "type": "Model", "params": { "width": 2.7, "height": 0.9, "bottom": 2.0 } },
                      { "type": "HtmlScreen", "size": [2.58, 0.78], "offset": [0, 2.45, 0.002] }] },
     { "name": "Ограда", "prefab": "fence", "position": [-5.2, 1.1, -46],
-      "components": [{ "type": "Model", "params": { "length": 234, "height": 1.0 } }, { "type": "StripeShadow", "length": 234, "top": 1.0, "rails": [1.0, 0.12] }] },
+      "components": [{ "type": "Model", "params": { "length": 54, "height": 1.0 } }, { "type": "StripeShadow", "length": 54, "top": 1.0, "crossbars": [1.0, 0.12] }] },
 
     { "name": "Вокзал", "position": [-24.25, -0.32, -8],
       "components": [{ "type": "Model", "model": "station/building", "params": { "size": [31.5, 13.8, 64], "color": "#9fc3b4",
@@ -67,8 +68,9 @@
       { "type": "Schedule" },
       { "type": "RzdBoard", "track": "Путь 1", "motion": { "brake": 1.2, "accel": 0.6 },
         "arrival": { "stop": "Платформа 1", "direction": -1, "approach": 440 },
-        "departure": { "stop": "Отправление", "direction": 1 } }
-      // , { "type": "rail/random-traffic", "consists": ["freight"], "tracks": ["Путь 3"], "direction": -1, "every": [420, 1200], "speed": [12, 16], "first": 90 }
+        "departure": { "stop": "Отправление", "direction": 1 } },
+      // грузовые по соседним путям раз в 5–14 минут, в обе стороны; не нужны — удалите эту строку
+      { "type": "rail/random-traffic", "consists": ["freight"], "tracks": ["Путь 2", "Путь 3"], "direction": 0, "every": [300, 840], "speed": [12, 16], "first": 45 }
     ] }
   ]
 }

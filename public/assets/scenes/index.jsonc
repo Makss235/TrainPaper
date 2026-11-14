@@ -3,6 +3,10 @@
 // scenes   — все сцены: id (для ?scene=id и панели), name (подпись), file (файл в этой папке).
 // stations — ID станции РЖД (внутренний ID табло, см. assets/data/stations.json) → id сцены.
 // default  — сцена для станций без своей.
+// flat     — плоская сцена вида «Вагон» (2D, спрайты): одна для всех станций.
+// flatPlatformKinds — типы платформы плоской сцены: [имя, подпись в панели «Платформа»]. Объекты типа в flat.jsonc
+//            помечены "tags": ["platform:<имя>"].
+// flatPlatforms — какая платформа у станции, когда в панели выбрано «По станции»: id её сцены → тип; остальным — первый тип.
 // Новая сцена: скопируйте _template.jsonc, добавьте строку в scenes и, если нужно, станцию в stations.
 {
   "scenes": [
@@ -15,5 +19,8 @@
     "428": "spb-glavny",
     "197": "murmansk"
   },
-  "default": "typical"
+  "default": "typical",
+  "flat": "flat.jsonc",
+  "flatPlatformKinds": [["open", "Открытая"], ["canopy", "С навесом"], ["halt", "Остановка"]],
+  "flatPlatforms": { "spb-glavny": "canopy", "murmansk": "canopy", "halt": "halt" }
 }

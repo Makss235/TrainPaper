@@ -102,7 +102,7 @@ export function startInspector(engine, { actions = {} } = {}) {
 
   // ---------- панели компонентов ----------
   // Компонент может показать своё состояние: метод inspectorPanel() → { title, rows: [[подпись, значение, объект?]] }.
-  // Так модули приложения (например, движение по расписанию) видны в инспекторе, а движок о них не знает.
+  // Так модули приложения (например, своя игровая логика) видны в инспекторе, а движок о них не знает.
   function renderPanels() {
     const panels = [];
     engine.scene.root.traverse(go => {
@@ -368,6 +368,6 @@ export function startInspector(engine, { actions = {} } = {}) {
     });
   }
   renderProps();
-  console.info("Инспектор: свободная камера — WASD/QE + мышь; объекты — слева; window.trainpaper / engine — в консоли");
+  console.info("Инспектор: свободная камера — WASD/QE + мышь; объекты — слева");
   return { select, refresh: renderTree };
 }

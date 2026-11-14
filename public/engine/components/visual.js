@@ -37,6 +37,9 @@ function placeHolder(holder, p) {
 }
 
 class VisualComponent extends Component {
+  /** @type {{dispose: () => void}[]} ресурсы видеокарты, принадлежащие только этому компоненту (см. own) */
+  owned = [];
+
   awake() {
     this.holder = new THREE.Group();
     this.holder.name = this.type;
@@ -45,8 +48,18 @@ class VisualComponent extends Component {
   }
   /** Построить содержимое заново (переопределяется). */
   rebuild() {}
+  /**
+   * Запомнить ресурсы видеокарты, которые принадлежат только этому компоненту (своя геометрия линий, своя
+   * текстура): они освобождаются при перестройке и удалении. Общие (единичные геометрии, геометрии моделей,
+   * материалы из кэша) сюда не попадают — ими пользуются другие объекты.
+   * @param {...({dispose: () => void} | null | undefined)} resources
+   */
+  own(...resources) {
+    for (const r of resources) if (r) this.owned.push(r);
+  }
   clear() {
     this.holder?.clear();
+    for (const r of this.owned.splice(0)) r.dispose();
   }
   onChange() {
     this.clear();
@@ -56,7 +69,7 @@ class VisualComponent extends Component {
   }
   onEnable() { if (this.holder) this.holder.visible = true; this.engine.scene.markDirty(this.gameObject); }
   onDisable() { if (this.holder) this.holder.visible = false; this.engine.scene.markDirty(this.gameObject); }
-  onDestroy() { this.holder?.removeFromParent(); this.engine?.scene.markDirty(this.gameObject); }
+  onDestroy() { this.clear(); this.holder?.removeFromParent(); this.engine?.scene.markDirty(this.gameObject); }
 }
 
 const VISUAL_PROPS = {
@@ -93,7 +106,7 @@ export class Model extends VisualComponent {
   static type = "Model";
   static doc = "Модель из папки моделей: JS-модель (assets/models/<имя>.js) или glTF из Blender (<имя>.glb).";
   static props = {
-    model: { type: "asset", default: "", doc: "Имя модели: \"lamp-post\", \"trains/coach\" или \"station.glb\"" },
+    model: { type: "asset", default: "", doc: "Имя модели: \"lamp-post\", \"city/house\" или \"tower.glb\"" },
     params: { type: "object", default: {}, doc: "Параметры модели (у каждой свои — см. её файл)" },
     scale: { type: "number", default: 1, doc: "Масштаб содержимого" },
     ...VISUAL_PROPS,
@@ -134,24 +147,73 @@ export class Model extends VisualComponent {
 
 export class Sprite extends VisualComponent {
   static type = "Sprite";
-  static doc = "Картинка на плоскости, повёрнутая к камере (или стоящая вертикально).";
+  static doc = "Картинка на плоскости: повёрнутая к камере (billboard) или стоящая как объект — слой 2D-сцены.";
   static props = {
-    texture: { type: "asset", default: "", doc: "Адрес картинки (относительно страницы)" },
+    texture: { type: "asset", default: "", doc: "Картинка (PNG, SVG, JPG), путь от папки assets/: \"img/sprites/cloud.svg\"" },
     size: { type: "vec2", default: [1, 1], doc: "Размер [ширина, высота], м" },
+    anchor: { type: "vec2", default: [.5, .5], doc: "Какая точка картинки стоит в начале объекта: [0, 0] — левый нижний угол, [.5, 0] — середина низа" },
+    repeat: { type: "vec2", default: [1, 1], doc: "Сколько раз повторить картинку [по ширине, по высоте] — для полос (платформа, горизонт)" },
     color: { type: "color", default: "#ffffff", doc: "Цвет-множитель" },
-    billboard: { type: "enum", options: ["camera", "vertical", "none"], default: "camera", doc: "camera — всегда к камере; vertical — поворот только вокруг вертикали; none — как объект" },
-    glowNight: { type: "number", default: 0, doc: "Подсветка ночью (0…1)" },
+    opacity: { type: "number", default: 1, min: 0, max: 1, doc: "Непрозрачность" },
+    billboard: { type: "enum", options: ["camera", "vertical", "none"], default: "camera", doc: "camera — всегда к камере; vertical — поворот только вокруг вертикали; none — как объект (слой 2D-сцены: лицом к +z)" },
+    light: { type: "enum", options: ["card", "surface", "none"], default: "card", doc: "Свет: card — плоская картинка, солнце освещает её с обеих сторон; surface — как обычная поверхность; none — не зависит от света" },
+    haze: { type: "number", default: 1, min: 0, doc: "Множитель дымки (0 — картинка не бледнеет с расстоянием)" },
+    glowNight: { type: "number", default: 0, doc: "Подсветка ночью (0…1 и больше): вывеска, табличка" },
+    night: { type: "boolean", default: false, doc: "Слой виден только ночью — проявляется вместе с фонарями (свет в окнах поверх дневной картинки)" },
     offset: VISUAL_PROPS.offset,
   };
 
+  /** Текстура, заданная из кода (setTexture) — её компонент не загружает и не освобождает @type {THREE.Texture | null} */
+  external = null;
+
+  /** Поменять непрозрачность на ходу (плавное появление): без пересборки, в отличие от set({ opacity }). @param {number} value */
+  setOpacity(value) {
+    const mesh = /** @type {any} */ (this.holder?.children[0]);
+    if (!mesh || mesh.material.uniforms.uOpacity.value === value) return;
+    mesh.material.uniforms.uOpacity.value = value;
+    this.invalidate();
+  }
+
+  /** Поменять цвет-множитель на ходу (без пересборки). @param {number[]} rgb  доли 0…1 */
+  setColor(rgb) {
+    const mesh = /** @type {any} */ (this.holder?.children[0]);
+    if (!mesh) return;
+    const c = mesh.material.uniforms.uColor.value;
+    if (c.x === rgb[0] && c.y === rgb[1] && c.z === rgb[2]) return;
+    c.set(rgb[0], rgb[1], rgb[2]);
+    this.invalidate();
+  }
+
+  /** Показать готовую текстуру (например, CanvasTexture с живым текстом) вместо картинки из файла. @param {THREE.Texture | null} texture */
+  setTexture(texture) {
+    this.external = texture;
+    this.rebuild();
+    this.invalidate();
+  }
+
   rebuild() {
     const p = this.props;
+    this.clear();
     placeHolder(this.holder, { offset: p.offset });
-    const tex = p.texture ? new THREE.TextureLoader().load(p.texture, () => this.invalidate()) : null;
-    if (tex) { tex.colorSpace = THREE.NoColorSpace; tex.anisotropy = 4; }
-    const mat = this.engine.materials.create({ map: tex || undefined, color: p.color, transparent: true, receive: false,
-      side: THREE.DoubleSide, litNight: [p.glowNight, p.glowNight, p.glowNight] });
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(p.size[0], p.size[1]), mat);
+    const tex = this.external || (p.texture ? new THREE.TextureLoader().load(this.engine.assets.url(p.texture), () => this.invalidate(),
+      undefined, () => this.engine.assets.report?.(`sprite:${p.texture}`, `Sprite «${this.gameObject.name}»: картинка ${p.texture} не загрузилась`)) : null);
+    if (tex && !this.external) {
+      tex.colorSpace = THREE.NoColorSpace;
+      tex.anisotropy = 4;
+      if (p.repeat[0] !== 1 || p.repeat[1] !== 1) tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    }
+    const lit = p.light !== "none";
+    const mat = this.engine.materials.create({ map: tex || undefined, color: lit ? p.color : [0, 0, 0], opacity: p.opacity, transparent: true, receive: false,
+      side: THREE.DoubleSide, cardLight: p.light === "card", nightOnly: p.night, haze: p.haze, depthWrite: false,
+      litNight: [p.glowNight, p.glowNight, p.glowNight], emissive: lit ? undefined : p.color });
+    const geometry = new THREE.PlaneGeometry(p.size[0], p.size[1]);
+    geometry.translate((.5 - p.anchor[0]) * p.size[0], (.5 - p.anchor[1]) * p.size[1], 0);
+    // повтор — координатами текстуры на плоскости (шейдер движка читает uv как есть)
+    const uv = geometry.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * p.repeat[0], uv.getY(i) * p.repeat[1]);
+    const mesh = new THREE.Mesh(geometry, mat);
+    this.own(geometry, mat);
+    if (tex && !this.external) this.own(tex);
     mesh.userData.noBatch = true;
     const cam = this.engine.camera, q = new THREE.Quaternion(), v = new THREE.Vector3();
     mesh.onBeforeRender = () => {
@@ -199,7 +261,9 @@ export class Line extends VisualComponent {
         prev = q;
       }
     }
-    this.holder.add(lines.build(this.engine.materials));
+    const mesh = lines.build(this.engine.materials);
+    this.own(mesh.geometry);
+    this.holder.add(mesh);
   }
 }
 
@@ -252,6 +316,8 @@ export class Glow extends VisualComponent {
     const k = p.light ? this.k ?? 1 : 1, night = p.light ? this.night ?? p.night : p.night;
     const glows = new GlowBatch(this.engine.palette);
     glows.add(p.offset, p.radius, p.color, { night, intensity: p.intensity * k });
-    this.holder.add(glows.build(this.engine.materials));
+    const mesh = glows.build(this.engine.materials);
+    this.own(mesh.geometry);
+    this.holder.add(mesh);
   }
 }

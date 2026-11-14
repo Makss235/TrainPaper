@@ -4,6 +4,6 @@
   "name": "Ограда",
   "components": [
     { "type": "Model", "model": "station/fence", "params": { "length": 250, "height": 1.12 }, "castShadow": false, "surface": false },
-    { "type": "StripeShadow", "length": 250, "top": 1.12, "rails": [1.12, 0.12] }
+    { "type": "StripeShadow", "length": 250, "top": 1.12, "crossbars": [1.12, 0.12] }
   ]
 }

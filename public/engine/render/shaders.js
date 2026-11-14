@@ -4,7 +4,7 @@
 //
 // Почему здесь нет шума, мерцания и муара:
 //  - тени — по карте теней с аппаратным сравнением и PCF 3×3: край мягкий, но стабильный;
-//  - повторяющиеся мелкие детали (швы плитки, шпалы, прутья ограды, гофра) не текстуры,
+//  - повторяющиеся мелкие детали (швы плитки, планки настила, прутья решётки, рифление) не текстуры,
 //    а формулы с честной фильтрацией по размеру пикселя (stripes): вдали они плавно сходятся
 //    в средний тон, вместо того чтобы рассыпаться на рябь;
 //  - граница cel-полос сглаживается по fwidth — ступенька тона без «лесенки».
@@ -40,7 +40,6 @@ export const LIGHTING = /* glsl */`
   uniform float uLamps;          // 0 днём … 1 ночью: фонари, окна, огни
   uniform sampler2D uLightTex;   // источники: 4 текселя на каждый (render/lighting.js setLights)
   uniform float uLightCount;
-  uniform float uLightTexH;
   uniform highp sampler2DShadow uSpotShadow0;
   uniform highp sampler2DShadow uSpotShadow1;
   uniform mat4 uSpotShadowMatrix[2];
@@ -65,100 +64,127 @@ export const LIGHTING = /* glsl */`
 
   uniform highp sampler2DShadow uShadowMap;
   uniform mat4 uShadowMatrix;
-  uniform vec4 uShadowParams;    // x — включено, y — сдвиг глубины, z — сдвиг по нормали (м), w — размер текселя
+  uniform vec4 uShadowParams;    // x — включено (1/0), y — сдвиг глубины, z — сдвиг по нормали (м)
+  uniform vec2 uShadowTexel;     // размер текселя карты по x и y (карта прямоугольная)
   uniform vec2 uShadowFade;      // тень гаснет к краю области теней: от … до (м от камеры)
   uniform vec2 uShadowStyle;     // x — сила тени (0 — нет, 1 — полная), y — мягкость края (множитель шага PCF)
 
-  // Тени-узоры (ограда): плоскость x = const, прутья и перила. Считаются аналитически — без карты теней,
+  // Тени-узоры (решётка): плоскость x = const, прутья, стойки и поперечины. Считаются аналитически — без карты теней,
   // поэтому тени тонких прутьев не дают муара.
   #define MAX_PATTERNS 2
   uniform vec4 uPatA[MAX_PATTERNS];   // x плоскости, y низа прутьев, y верха прутьев, шаг прутьев (0 — нет)
-  uniform vec4 uPatB[MAX_PATTERNS];   // ширина прута, шаг стоек, ширина стойки, полутолщина перил
-  uniform vec4 uPatC[MAX_PATTERNS];   // z от, z до, y перил 1, y перил 2
+  uniform vec4 uPatB[MAX_PATTERNS];   // ширина прута, шаг стоек, ширина стойки, полутолщина поперечин
+  uniform vec4 uPatC[MAX_PATTERNS];   // z от, z до, y поперечины 1, y поперечины 2
 
+  // Без досрочных return: компилятор D3D превращает их в флаги, цикл PCF становится «условным», и чтение карты
+  // теней в нём даёт предупреждение о производных на каждую программу. Вложенные if — тот же расчёт без него.
   float sunShadow(vec3 wp, vec3 n, float ndl){
-    if (uShadowParams.x < .5) return 1.0;
-    vec3 p = wp + n * uShadowParams.z * (1.2 - ndl);
-    vec4 s = uShadowMatrix * vec4(p, 1.0);
-    if (s.x < 0.0 || s.x > 1.0 || s.y < 0.0 || s.y > 1.0 || s.z > 1.0) return 1.0;
-    float z = s.z - uShadowParams.y;
-    float t = uShadowParams.w * uShadowStyle.y;
-    // PCF 4×4: каждое чтение уже сравнивает 4 соседних текселя с билинейным весом —
-    // край тени мягкий (~2 текселя) и без «лесенки» от размера текселя
-    float sum = 0.0;
-    for (int i = 0; i < 4; i++)
-      for (int j = 0; j < 4; j++)
-        sum += textureLod(uShadowMap, vec3(s.xy + (vec2(float(i), float(j)) - 1.5) * t, z), 0.0);
-    float sh = mix(1.0, sum / 16.0, uShadowStyle.x);
-    float d = distance(wp, cameraPosition);
-    return mix(sh, 1.0, smoothstep(uShadowFade.x, uShadowFade.y, d));
-  }
-
-  // Производные (fwidth) считаются без ветвлений: внутри if/continue, разных для соседних пикселей,
-  // они не определены и дают крапинки на стыках.
-  float patternShadow(vec3 wp){
     float lit = 1.0;
-    for (int i = 0; i < MAX_PATTERNS; i++){
-      vec4 A = uPatA[i], B = uPatB[i], C = uPatC[i];
-      if (A.w <= 0.0) continue;                          // одинаково для всех пикселей — можно
-      float sx = abs(uSunDir.x) < 1e-3 ? 1e-3 : uSunDir.x;
-      float t = (A.x - wp.x) / sx;                       // до плоскости ограды вдоль луча на солнце
-      vec3 h = wp + uSunDir * t;
-      float bars = stripesC(h.z / A.w, B.x / A.w);
-      float posts = stripesC(h.z / B.y, B.z / B.y);
-      float fw = fwidth(h.y);
-      float inBars = step(A.y, h.y) * step(h.y, A.z);
-      float inPosts = step(A.y - .02, h.y) * step(h.y, C.w + .1);
-      float rail1 = 1.0 - smoothstep(B.w, B.w + fw, abs(h.y - C.z));
-      float rail2 = 1.0 - smoothstep(B.w, B.w + fw, abs(h.y - C.w));
-      float cover = max(max(bars * inBars, posts * inPosts), max(rail1, rail2));
-      cover *= step(0.0, t) * step(h.z, C.x) * step(C.y, h.z);
-      lit *= 1.0 - cover;
+    if (uShadowParams.x > 0.0) {
+      vec3 p = wp + n * uShadowParams.z * (1.2 - ndl);
+      vec4 s = uShadowMatrix * vec4(p, 1.0);
+      if (s.x >= 0.0 && s.x <= 1.0 && s.y >= 0.0 && s.y <= 1.0 && s.z <= 1.0) {
+        float z = s.z - uShadowParams.y;
+        vec2 t = uShadowTexel * uShadowStyle.y;
+        // PCF 4×4: каждое чтение уже сравнивает 4 соседних текселя с билинейным весом —
+        // край тени мягкий (~2 текселя) и без «лесенки» от размера текселя
+        float sum = 0.0;
+        for (int i = 0; i < 4; i++)
+          for (int j = 0; j < 4; j++)
+            sum += textureLod(uShadowMap, vec3(s.xy + (vec2(float(i), float(j)) - 1.5) * t, z), 0.0);
+        float sh = mix(1.0, sum / 16.0, uShadowStyle.x);
+        float d = distance(wp, cameraPosition);
+        lit = mix(sh, 1.0, smoothstep(uShadowFade.x, uShadowFade.y, d));
+      }
     }
     return lit;
   }
 
-  vec4 lightTexel(float i, float k){ return texture2D(uLightTex, vec2((k + .5) * .25, (i + .5) / uLightTexH)); }
+  // Тень одной решётки: прутья и стойки — фильтрованные полосы, поперечины — линии со сглаженным краем.
+  float patternOne(vec3 wp, vec4 A, vec4 B, vec4 C){
+    float barStep = max(A.w, 1e-3), postStep = max(B.y, 1e-3);
+    float sx = abs(uSunDir.x) < 1e-3 ? 1e-3 : uSunDir.x;
+    float t = (A.x - wp.x) / sx;                         // до плоскости решётки вдоль луча на солнце
+    vec3 h = wp + uSunDir * t;
+    float bars = stripesC(h.z / barStep, B.x / barStep);
+    float posts = stripesC(h.z / postStep, B.z / postStep);
+    float fw = max(fwidth(h.y), 1e-5);
+    float inBars = step(A.y, h.y) * step(h.y, A.z);
+    float inPosts = step(A.y - .02, h.y) * step(h.y, C.w + .1);
+    float cross1 = 1.0 - smoothstep(B.w, B.w + fw, abs(h.y - C.z));
+    float cross2 = 1.0 - smoothstep(B.w, B.w + fw, abs(h.y - C.w));
+    float cover = max(max(bars * inBars, posts * inPosts), max(cross1, cross2));
+    cover *= step(0.0, t) * step(h.z, C.x) * step(C.y, h.z);
+    return 1.0 - cover;
+  }
+  // Именно цикл с пропуском пустых слотов: развёрнутый вручную вариант (два вызова подряд) компилятор D3D
+  // собирает неверно — тень решётки пропадает целиком (проверено сравнением кадров).
+  float patternShadow(vec3 wp){
+    float lit = 1.0;
+    for (int i = 0; i < MAX_PATTERNS; i++){
+      if (uPatA[i].w <= 0.0) continue;                   // одинаково для всех пикселей — можно
+      lit *= patternOne(wp, uPatA[i], uPatB[i], uPatC[i]);
+    }
+    return lit;
+  }
+
+  // тексель данных источника: i — номер источника, k — 0…3 (render/lighting.js setLights). texelFetch читает
+  // ровно один тексель без производных: цикл по источникам остаётся настоящим циклом с выходом по break
+  // (с texture2D компилятор D3D разворачивал все MAX_LIGHTS повторов — «gradient instruction used in a loop»)
+  vec4 lightTexel(int i, int k){ return texelFetch(uLightTex, ivec2(k, i), 0); }
 
   // тень от прожектора: карта глубины из его «глаз», PCF 3×3. Индекс — 0 или 1 (своя карта у каждого)
   float spotShadow(float idx, vec3 wp, vec3 n){
     bool first = idx < .5;
-    vec4 P = vec4(wp + n * (first ? uSpotShadowParams[0].z : uSpotShadowParams[1].z), 1.0);
-    vec4 s = first ? uSpotShadowMatrix[0] * P : uSpotShadowMatrix[1] * P;
     vec4 prm = first ? uSpotShadowParams[0] : uSpotShadowParams[1];
-    if (prm.x < .5 || s.w <= 0.0) return 1.0;
-    vec3 c = s.xyz / s.w;
-    if (c.x < 0.0 || c.x > 1.0 || c.y < 0.0 || c.y > 1.0 || c.z > 1.0) return 1.0;
-    float z = c.z - prm.y;
-    float sum = 0.0;
-    for (int i = -1; i <= 1; i++)
-      for (int j = -1; j <= 1; j++) {
-        vec3 q = vec3(c.xy + vec2(float(i), float(j)) * prm.w, z);
-        sum += first ? textureLod(uSpotShadow0, q, 0.0) : textureLod(uSpotShadow1, q, 0.0);
+    vec4 P = vec4(wp + n * prm.z, 1.0);
+    vec4 s = first ? uSpotShadowMatrix[0] * P : uSpotShadowMatrix[1] * P;
+    float lit = 1.0;
+    if (prm.x > .5 && s.w > 0.0) {
+      vec3 c = s.xyz / s.w;
+      if (c.x >= 0.0 && c.x <= 1.0 && c.y >= 0.0 && c.y <= 1.0 && c.z <= 1.0) {
+        float z = c.z - prm.y;
+        float sum = 0.0;
+        for (int i = -1; i <= 1; i++)
+          for (int j = -1; j <= 1; j++) {
+            vec3 q = vec3(c.xy + vec2(float(i), float(j)) * prm.w, z);
+            sum += first ? textureLod(uSpotShadow0, q, 0.0) : textureLod(uSpotShadow1, q, 0.0);
+          }
+        lit = sum / 9.0;
       }
-    return sum / 9.0;
+    }
+    return lit;
   }
 
   // источники света: точечные (пятно с мягким краем), прожекторы (конус с полутенью, может быть тень),
   // направленные (подсветка без спада). Ночные горят × uLamps.
+  // Пиксель обычно освещают один-два фонаря из десятков: у остальных читается один тексель (позиция и радиус),
+  // и источник сразу пропускается.
   vec3 lampLight(vec3 wp, vec3 n){
     vec3 sum = vec3(0.0);
+    int count = int(uLightCount + .5);
+    // тени прожекторов читаются до цикла (чтение карты теней внутри цикла с выходом по break компилятор D3D
+    // не может оставить циклом). Карт не больше двух; пока прожекторов с тенями нет, это две проверки uniform
+    float spotSh0 = uSpotShadowParams[0].x > .5 ? spotShadow(0.0, wp, n) : 1.0;
+    float spotSh1 = uSpotShadowParams[1].x > .5 ? spotShadow(1.0, wp, n) : 1.0;
     for (int i = 0; i < MAX_LIGHTS; i++){
-      if (float(i) >= uLightCount) break;
-      float fi = float(i);
-      vec4 a = lightTexel(fi, 0.0), b = lightTexel(fi, 1.0), c = lightTexel(fi, 2.0), d = lightTexel(fi, 3.0);
+      if (i >= count) break;
+      vec4 a = lightTexel(i, 0);                         // позиция, радиус (< 0 — направленный, без радиуса)
+      vec3 dv = a.xyz - wp;
+      float d2 = dot(dv, dv);
+      if (a.w > 0.0 && d2 >= a.w * a.w) continue;
+      vec4 b = lightTexel(i, 1), c = lightTexel(i, 2), d = lightTexel(i, 3);
       vec3 L;
       float att = 1.0;
       if (d.x > 1.5) {
         L = -c.xyz;                                      // направленный: c — куда идёт свет
       } else {
-        vec3 dv = a.xyz - wp;
-        float dist = length(dv);
+        float dist = sqrt(d2);
         L = dv / max(dist, 1e-3);
         att = clamp(1.0 - dist / a.w, 0.0, 1.0);
         att = att * att * (3.0 - 2.0 * att);             // мягкий край светового пятна
         if (d.x > .5) att *= smoothstep(c.w, max(d.y, c.w + 1e-4), dot(-L, c.xyz));   // конус прожектора
-        if (d.z > -.5 && att > 0.0) att *= spotShadow(d.z, wp, n);
+        if (d.z > -.5) att *= d.z < .5 ? spotSh0 : spotSh1;
       }
       float k = b.w > .5 ? uLamps : 1.0;
       sum += b.rgb * att * k * (.3 + .7 * max(dot(n, L), 0.0));
@@ -204,10 +230,11 @@ export const TOON_VERTEX = /* glsl */`
 
 /**
  * Cel-материал. Включается определениями (defines):
- *  USE_MAP — текстура (ливрея), TOON — две полосы тона для гладких тел (деревья),
+ *  USE_MAP — текстура, TOON — две полосы тона для гладких тел (деревья),
  *  GLASS — стекло окна (днём отражает небо, ночью светится изнутри), RECEIVE — принимает тени,
- *  PATTERN_SHADOWS — принимает тени-узоры ограды, PAT_TILES/PAT_SLEEPERS/PAT_STRIPES — узоры поверхности,
- *  WET, SNOW — поверхность мокнет / покрывается снегом, ALPHA_STRIPES — прозрачность по узору (ограда).
+ *  PATTERN_SHADOWS — принимает тени-узоры решёток, PAT_TILES/PAT_SLATS/PAT_STRIPES — узоры поверхности,
+ *  WET, SNOW — поверхность мокнет / покрывается снегом, ALPHA_STRIPES — прозрачность по узору (решётка из прутьев),
+ *  CARD_LIGHT — плоская картинка освещается солнцем с обеих сторон, NIGHT_ONLY — слой виден только ночью.
  */
 export const TOON_FRAGMENT = /* glsl */`
   ${COMMON}
@@ -223,7 +250,7 @@ export const TOON_FRAGMENT = /* glsl */`
   #ifdef USE_MAP
     uniform sampler2D uMap;
   #endif
-  #if defined(PAT_TILES) || defined(PAT_SLEEPERS) || defined(PAT_STRIPES) || defined(ALPHA_STRIPES)
+  #if defined(PAT_TILES) || defined(PAT_SLATS) || defined(PAT_STRIPES) || defined(ALPHA_STRIPES)
     uniform vec4 uPat;        // параметры узора (см. materials.js)
     uniform vec3 uPatColor;   // цвет линий узора
   #endif
@@ -249,21 +276,21 @@ export const TOON_FRAGMENT = /* glsl */`
       seams *= 1.0 - smoothstep(uPat.w * .6, uPat.w, distance(vWorld, cameraPosition));
       base = mix(base, uPatColor, seams * .85);
     #endif
-    #ifdef PAT_SLEEPERS
-      // шпалы в координатах поверхности (uv в метрах: u — поперёк пути от оси, v — вдоль):
-      // узор едет вместе с объектом. uPat = —, полудлина шпалы, шаг, ширина шпалы
+    #ifdef PAT_SLATS
+      // поперечные планки в координатах поверхности (uv в метрах: u — поперёк полосы от её оси, v — вдоль):
+      // узор едет вместе с объектом. uPat = —, полудлина планки, шаг, ширина планки
       float inX = 1.0 - smoothstep(uPat.y - fwidth(vUv.x), uPat.y, abs(vUv.x));
       float sl = stripesC(vUv.y / uPat.z, uPat.w / uPat.z) * inX;
       base = mix(base, uPatColor, sl);
     #endif
     #ifdef PAT_STRIPES
-      // полосы по координате поверхности u (гофра, рёбра, гармошка) — едут вместе с объектом.
+      // полосы по координате поверхности u (рифление, рёбра, гармошка) — едут вместе с объектом.
       // uPat = шаг, ширина (в единицах u), сила, —
       float st = stripesC(vUv.x / uPat.x, uPat.y / uPat.x);
       base = mix(base, uPatColor, st * uPat.z);
     #endif
     #ifdef ALPHA_STRIPES
-      // прутья ограды: прозрачность по узору, вдали — ровная полупрозрачная лента
+      // прутья решётки: прозрачность по узору, вдали — ровная полупрозрачная лента
       alpha *= stripesC(vWorld.z / uPat.x, uPat.y / uPat.x);
       base = uPatColor;
     #endif
@@ -271,6 +298,11 @@ export const TOON_FRAGMENT = /* glsl */`
     vec3 n = normalize(vNormal);
     if (!gl_FrontFacing) n = -n;
     float ndl = dot(n, uSunDir);
+    #ifdef CARD_LIGHT
+      // плоская картинка-«карточка»: солнце освещает её с любой стороны (как лист бумаги на просвет),
+      // иначе в 2D-сцене, где солнце видно в кадре, все спрайты были бы в тени
+      ndl = abs(ndl);
+    #endif
     float d = max(ndl, 0.0);
     #ifdef TOON
       // гладкое тело в два тона: граница света сглажена на ширину пикселя
@@ -289,18 +321,22 @@ export const TOON_FRAGMENT = /* glsl */`
     vec3 k = amb + uSun * d * sh + uExtra + lampLight(vWorld, n) + uLitNight * uLamps;
 
     #ifdef SNOW
-      // снег ложится на то, что смотрит вверх
-      float cover = uSnow * smoothstep(.55, .85, n.y) * openSky(vWorld);
-      base = mix(base, vec3(.93, .95, .97), cover);
+      // снег ложится на то, что смотрит вверх (без снега — ни одной лишней операции: uSnow общий для всех пикселей)
+      if (uSnow > 0.0) {
+        float cover = uSnow * smoothstep(.55, .85, n.y) * openSky(vWorld);
+        base = mix(base, vec3(.93, .95, .97), cover);
+      }
     #endif
     vec3 col = base * softCeiling(k);
     #ifdef WET
-      // мокрая поверхность темнее и под скользящим взглядом отражает небо
-      vec3 v = normalize(cameraPosition - vWorld);
-      float fres = pow(1.0 - max(dot(v, n), 0.0), 4.0);
-      float wet = uWet * mix(1.0, openSky(vWorld), smoothstep(.5, .8, n.y));   // стены мокнут и под карнизом
-      col = mix(col, col * .78, wet);
-      col = mix(col, uSkyHorizon * (.55 + .45 * k.g), wet * fres * .55);
+      // мокрая поверхность темнее и под скользящим взглядом отражает небо (в сухую погоду расчёт пропускается)
+      if (uWet > 0.0) {
+        vec3 v = normalize(cameraPosition - vWorld);
+        float fres = pow(1.0 - max(dot(v, n), 0.0), 4.0);
+        float wet = uWet * mix(1.0, openSky(vWorld), smoothstep(.5, .8, n.y));   // стены мокнут и под карнизом
+        col = mix(col, col * .78, wet);
+        col = mix(col, uSkyHorizon * (.55 + .45 * k.g), wet * fres * .55);
+      }
     #endif
 
     #ifdef GLASS
@@ -323,6 +359,9 @@ export const TOON_FRAGMENT = /* glsl */`
 
     col += uEmissive + uEmissiveNight * uLamps;
     col = applyFog(col, vWorld, uHaze);
+    #ifdef NIGHT_ONLY
+      alpha *= uLamps;                               // ночной слой (свет в окнах): проявляется вместе с фонарями
+    #endif
     gl_FragColor = vec4(col * alpha, alpha);
   }
 `;

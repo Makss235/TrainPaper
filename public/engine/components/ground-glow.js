@@ -47,7 +47,7 @@ function material(engine, mode) {
 export class GroundGlow extends Component {
   static type = "GroundGlow";
   static category = "Свет";
-  static doc = "Мягкие световые пятна на полу (свет из окон на платформу, отсвет витрины): прямоугольники в осях объекта, яркость спадает к краям.";
+  static doc = "Мягкие световые пятна на полу (свет из окон на тротуар, отсвет витрины): прямоугольники в осях объекта, яркость спадает к краям.";
   static props = {
     rects: { type: "array", default: [], doc: "Прямоугольники [[x0, z0, x1, z1], ...] в осях объекта, м" },
     height: { type: "number", default: 0, doc: "Высота плоскости над объектом, м" },

@@ -3,7 +3,7 @@
 //             считается заново, только когда перерисована сцена (в простое — ничего);
 //   outline — контуры по глубине сцены (стилизация «рисунок тушью»): скачок глубины между соседними пикселями;
 //   lut     — цветокоррекция по таблице 3D LUT: PNG-полоса N² × N (256×16 или 1024×32), amount 0…1.
-//             Путь к картинке — от папки assets/ (как у src расписания).
+//             Путь к картинке — от папки assets/.
 // @ts-check
 import * as THREE from "three";
 import { FullscreenPass, PostEffect } from "../post.js";
@@ -107,11 +107,11 @@ export class Outline extends PostEffect {
     uniform sampler2D uOutlineDepth;
     uniform vec4 uOutline;         // сила, порог, толщина (px), дальность
     uniform vec3 uOutlineColor;
-    uniform vec2 uOutlineNearFar;
+    uniform vec4 uOutlineProjZ;    // строки z и w матрицы проекции: [2][2], [3][2], [2][3], [3][3]
     float outlineDepth(vec2 uv){
-      float d = texture2D(uOutlineDepth, uv).r;
-      float n = uOutlineNearFar.x, f = uOutlineNearFar.y;
-      return n * f / (f - d * (f - n));
+      // расстояние вдоль оси камеры — через саму матрицу: верно для перспективы и для ортографии
+      float ndc = texture2D(uOutlineDepth, uv).r * 2.0 - 1.0;
+      return (ndc * uOutlineProjZ.w - uOutlineProjZ.y) / (ndc * uOutlineProjZ.z - uOutlineProjZ.x);
     }
     vec3 outline(vec3 col, vec2 uv){
       vec2 px = uOutline.z / uRes;
@@ -126,15 +126,16 @@ export class Outline extends PostEffect {
       return mix(col, uOutlineColor, line * uOutline.x);
     }`;
   depth = { value: /** @type {THREE.Texture | null} */ (null) };
-  nearFar = { value: new THREE.Vector2(.3, 6000) };
+  projZ = { value: new THREE.Vector4(-1, -.6, -1, 0) };
   /** @param {Record<string, any>} p */
   uniforms(p) {
-    return { uOutlineDepth: this.depth, uOutline: [p.amount, p.threshold, p.width, p.fade], uOutlineColor: this.stack.engine.palette.rgb(p.color), uOutlineNearFar: this.nearFar };
+    return { uOutlineDepth: this.depth, uOutline: [p.amount, p.threshold, p.width, p.fade], uOutlineColor: this.stack.engine.palette.rgb(p.color), uOutlineProjZ: this.projZ };
   }
   /** @param {import("../post.js").PostInputs} i */
   prepare(i) {
     this.depth.value = i.depth;
-    this.nearFar.value.set(i.camera.near, i.camera.far);
+    const pe = i.camera.projectionMatrix.elements;
+    this.projZ.value.set(pe[10], pe[14], pe[11], pe[15]);
   }
 }
 

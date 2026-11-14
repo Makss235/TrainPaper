@@ -1,5 +1,5 @@
 // Подготовка node --test: голый импорт "three" (как в importmap страниц) ведёт на копию three.js
-// из public/assets/vendor — так тесты могут проверять GameObject, Scene и компоненты без браузера.
+// из public/vendor — так тесты могут проверять GameObject, Scene и компоненты без браузера.
 // @ts-check
 import { register } from "node:module";
 

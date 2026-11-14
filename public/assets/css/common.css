@@ -202,3 +202,9 @@ body {
   pointer-events: none;
   background: radial-gradient(ellipse 78% 72% at 50% 46%, transparent 58%, rgba(6, 10, 26, .24) 100%);
 }
+
+/* ползунок времени суток */
+.time-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.time-slider { flex: 1; min-width: 0; height: 22px; margin: 0; accent-color: var(--rzd-red); cursor: pointer; }
+.time-value { min-width: 3.2em; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; color: var(--ink-dim); }
+.time-row.on .time-value { color: #fff; }

@@ -1,7 +1,7 @@
 // @ts-check
 // Вид «Вагон»: смотрим с платформы на хвост поезда сбоку. Хвостовой вагон с красной дверью,
 // в окне служебного купе — маршрутная табличка, слева — табличка станции и фонарь.
-import { localTime, startApp } from "../lib/app.js";
+import { startApp } from "../lib/app.js";
 import { bellowsShapes, BODY_BOTTOM_M, CAR_L, coachShapes, H_M, PITCH, ROOF, RZD_LOGO } from "../../shared/livery/coach-shapes.js";
 import { clamp } from "../lib/color.js";
 import { pathD, roundRect } from "../../shared/geom.js";
@@ -13,7 +13,7 @@ import { noAnimation } from "../lib/settings.js";
 import { initStars, renderSky } from "../lib/skyview.js";
 import { drawClouds, driftClouds, lightClouds } from "../lib/clouds.js";
 import { box, clipAxis, hull } from "../../shared/clip.js";
-import { countdown, delayInfo, eventWord, headline, numberText, stopMinutes } from "../lib/trains.js";
+import { updateInfo as fillInfo } from "../lib/info.js";
 
 const NS = "http://www.w3.org/2000/svg";
 const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
@@ -447,49 +447,7 @@ function updatePlate() {
   for (const g of plateGroups) drawPlate(g, state.shown?.train || null);
 }
 
-function formatPlace(train) {
-  const parts = [train.platform ? `платф. ${train.platform}` : null, train.track ? `путь ${train.track}` : null].filter(Boolean);
-  return parts.length ? parts.join(" · ") : "уточняется";
-}
-
-function updateInfo(now) {
-  const info = $("info"), item = state.shown;
-  info.classList.toggle("empty", !item);
-  if (!item) return;
-  const t = item.train, off = state.info.utcOffset;
-  const arrival = item.event === "arrival";
-  $("headline").textContent = headline(item);
-  $("headline").classList.toggle("arrival", arrival);
-  $("countdown").textContent = countdown(item, now);
-  $("number").textContent = `№ ${numberText(t)}`;
-  $("from").textContent = city(t.from);
-  $("to").textContent = city(t.to);
-  const ev = arrival ? t.arrival : t.departure;
-  const plan = localTime(ev.plan * 1000, off), expected = localTime(ev.expected * 1000, off);
-  $("kTime").textContent = eventWord(item);
-  $("vTime").textContent = plan === expected ? plan : `${expected} (по расписанию ${plan})`;
-  $("vPlace").textContent = formatPlace(t);
-  const delay = delayInfo(item);
-  const stop = t.kind === "transit" ? stopMinutes(t) : null;
-  $("vDelay").textContent = delay.text + (stop != null && item.event === "departure" ? `, стоянка ${stop} мин` : "");
-  $("vDelay").className = `v ${delay.level}`;
-  const pos = t.position && t.position !== state.info.rzdName ? title(t.position) : null;
-  $("kPos").textContent = t.status === "UNDEF" ? "Состав" : "Сейчас";
-  $("vPos").textContent = pos ? `${pos}${t.positionTime ? `, ${localTime(t.positionTime * 1000, off)}` : ""}` :
-    t.status === "UNDEF" ? "ещё не в пути" : "у платформы";
-  const rest = state.list.filter(x => x.train.id !== t.id).slice(0, 2);
-  $("next").replaceChildren(...(rest.length ? [Object.assign(document.createElement("div"), { className: "title", textContent: "Дальше" })] : []),
-    ...rest.map(x => {
-      const row = document.createElement("div");
-      row.className = "row";
-      const other = x.event === "arrival" ? `из ${city(x.train.from)}` : `в ${city(x.train.to)}`;
-      row.innerHTML = `<span class="t"></span><span class="n"></span><span class="d"></span>`;
-      row.children[0].textContent = localTime(x.time, off);
-      row.children[1].textContent = x.train.number;
-      row.children[2].textContent = other;
-      return row;
-    }));
-}
+const updateInfo = (/** @type {number} */ now) => fillInfo(now, state.shown, state.list, state.info);
 
 /* ---------- движение и параллакс ---------- */
 

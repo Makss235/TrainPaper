@@ -4,7 +4,9 @@
 // @ts-check
 import { registerComponent } from "../../../../engine/index.js";
 import { DepartureBoard } from "./departure-board.js";
+import { FlatTrain } from "./flat-train.js";
 
 registerComponent(/** @type {any} */ (DepartureBoard));
+registerComponent(/** @type {any} */ (FlatTrain));
 
-export { DepartureBoard };
+export { DepartureBoard, FlatTrain };

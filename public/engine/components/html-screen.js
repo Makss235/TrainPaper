@@ -1,4 +1,4 @@
-// HTML-элемент на плоскости в 3D (табло, вывеска с живым текстом): элемент страницы натягивается
+// HTML-элемент на плоскости в 3D (экран, вывеска с живым текстом): элемент страницы натягивается
 // на прямоугольник объекта через CSS matrix3d. Текст остаётся настоящим текстом — чёткий при любом
 // ракурсе и дешёвый: перерисовка 3D-сцены ему не нужна.
 // Ограничение: элемент всегда поверх сцены (его не заслоняют объекты), поэтому ставьте экран так,
@@ -23,7 +23,7 @@ export function homography(w, h, [x0, y0], [x1, y1], [x2, y2], [x3, y3]) {
 
 export class HtmlScreen extends Component {
   static type = "HtmlScreen";
-  static doc = "HTML-элемент страницы на прямоугольнике в 3D (табло с живым текстом). Прямоугольник — в плоскости xy объекта, лицом к +z.";
+  static doc = "HTML-элемент страницы на прямоугольнике в 3D (экран с живым текстом). Прямоугольник — в плоскости xy объекта, лицом к +z.";
   static props = {
     element: { type: "string", default: "", doc: "CSS-селектор элемента: \"#board\"" },
     size: { type: "vec2", default: [2, 1], doc: "Ширина и высота экрана, м" },
@@ -45,6 +45,8 @@ export class HtmlScreen extends Component {
   onEnable() { this.place(); }
   onDestroy() {
     if (this.hook) this.engine.afterRender = this.engine.afterRender.filter(f => f !== this.hook);
+    // экрана больше нет — элемент не должен висеть поверх сцены на прежнем месте
+    if (this.el) this.el.style.display = "none";
   }
 
   /** Углы экрана в мире: левый верхний, правый верхний, правый нижний, левый нижний. */
@@ -58,7 +60,8 @@ export class HtmlScreen extends Component {
   place() {
     const el = this.el;
     if (!el) return;
-    if (!this.enabled || !this.gameObject.activeInHierarchy) { el.style.display = "none"; return; }
+    // выключенный экран элемент не трогает (его спрятал onDisable): тем же элементом может владеть другой, включённый экран
+    if (!this.enabled || !this.gameObject.activeInHierarchy) return;
     this.object3D.updateMatrixWorld(true);
     const c = this.corners(), E = this.engine;
     const pts = c.map(p => E.project(p));

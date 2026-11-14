@@ -60,6 +60,8 @@ export class Train extends Component {
   plate = null;
   /** Промис: вагоны построены (размеры известны). @type {Promise<Train>} */
   ready = Promise.resolve(this);
+  /** Материал таблички этого поезда (создаётся с первым вагоном) @type {import("three").ShaderMaterial | null} */
+  plateMaterial = null;
 
   awake() {
     this.plate = Train.Plate ? new Train.Plate() : null;
@@ -75,6 +77,7 @@ export class Train extends Component {
 
   onDestroy() {
     this.plate?.dispose();
+    this.plateMaterial?.dispose();
   }
 
   /** Головной вагон (объект). */
@@ -176,8 +179,11 @@ export class Train extends Component {
 
   /** Табличка — во все слоты "plate" модели вагона. @param {Car} car */
   #plates(car) {
-    if (!this.plate || !car.model) return;
-    const mat = this.engine.materials.toon({ map: this.plate.texture, receive: false, litNight: [.95, .88, .72] });
+    if (!this.plate || !car.model || this.destroyed) return;
+    // свой материал поезда (не из кэша движка): у каждого поезда своя текстура таблички, и вместе с поездом
+    // материал освобождается — иначе кэш рос бы на один материал с каждым поездом, пока открыта страница
+    this.plateMaterial ||= this.engine.materials.create({ map: this.plate.texture, receive: false, litNight: [.95, .88, .72] });
+    const mat = this.plateMaterial;
     for (const mesh of car.model.slots("plate")) mesh.material = mat;
     this.invalidate("scene");
   }

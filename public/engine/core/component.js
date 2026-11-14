@@ -14,9 +14,12 @@
 // onEnable()/onDisable() — объект или компонент включили/выключили; onChange(keys) — поменялись свойства
 // (через set()); onDestroy() — объект удалён.
 //
-// Три инструмента поведения (движок рисует кадры, только пока они работают):
-//   update(dt)                 — постоянное поведение; this.sleep() / this.wake(); static fps, static order;
+// Оживить объект можно двумя способами (движок рисует кадры, только пока они работают):
+//   update(dt)                 — метод класса: постоянное поведение; this.sleep() / this.wake(); static fps, static order;
 //                                dt — секунды симуляции (engine.time), static realTime = true — реальные;
+//   this.animate(tick, fps)    — анимация по месту: функция tick(now, dt) идёт, пока не вернёт false
+//                                (или до this.stopAnimation()); у компонента их может быть несколько — по именам;
+// и два помощника поверх них:
 //   this.tween({ from, to, duration, ease, onUpdate })   — разовый плавный переход, промис;
 //   this.wait(с) / this.every(с, fn) / this.at("14:05", fn)  — таймеры и корутины по часам симуляции.
 // Всё это снимается само, когда компонент удалён (this.signal); промисы wait/tween отклоняются CancelledError,
@@ -27,7 +30,7 @@ import { CancelledError, isCancelled } from "./time.js";
 /**
  * @typedef {object} PropSpec  Описание свойства компонента (для проверки данных, инспектора и документации)
  * @property {string} type  "number" | "string" | "boolean" | "color" | "vec2" | "vec3" | "enum" | "array" | "object" | "asset"
- *   | "ref" (имя или путь объекта → GameObject) | "component" ("Путь 2#Track" → компонент)
+ *   | "ref" (имя или путь объекта → GameObject) | "component" ("Дверь 2#Door" → компонент)
  * @property {any} [default]   значение по умолчанию
  * @property {string} [doc]    пояснение
  * @property {string[]} [options]  варианты для enum
@@ -288,11 +291,17 @@ export class Component {
   #label() { return `${this.gameObject?.name} · ${this.type}`; }
 
   /**
-   * @deprecated используйте update(dt) со static fps или tween(). Оставлено на один этап.
-   * Анимация: tick(now, dt) вызывается fps раз в секунду, пока возвращает не false и компонент жив.
+   * Анимация — второй способ оживить объект (первый — метод update): tick(now, dt) вызывается fps раз в секунду,
+   * пока не вернёт false, пока её не снимут stopAnimation() или пока компонент жив. Пока объект или компонент
+   * выключен, tick не вызывается. Время — реальное: now — мс (как performance.now()), dt — секунды с прошлого вызова.
+   * Кадр заказывает сам tick: this.invalidate() или this.gameObject.moved().
+   *
+   *   this.animate((now, dt) => { this.object3D.rotation.y += dt; this.gameObject.moved(); }, 30);
+   *   this.animate(now => { door.position.x = Math.min(1, (now - t0) / 800); this.invalidate(); return now - t0 < 800; }, 60, "door");
+   *
    * @param {(now: number, dt: number) => boolean | void} tick
-   * @param {number} [fps]
-   * @param {string} [key]  имя анимации (по умолчанию одна на компонент)
+   * @param {number} [fps]  не чаще стольких раз в секунду (по умолчанию — частота кадров)
+   * @param {string} [key]  имя анимации: у компонента их может быть несколько; то же имя — замена прежней
    */
   animate(tick, fps, key = "") {
     const k = `c${this.id}${key}`;
@@ -305,12 +314,15 @@ export class Component {
     }, fps);
   }
 
-  /** @deprecated см. animate(). @param {string} [key] */
+  /** Снять анимацию, запущенную animate(). @param {string} [key] */
   stopAnimation(key = "") {
     const k = `c${this.id}${key}`;
     this._anims.delete(k);
     this.engine?.loop.stop(k);
   }
+
+  /** Идёт ли анимация. @param {string} [key] */
+  isAnimating(key = "") { return this._anims.has(`c${this.id}${key}`); }
 
   // ---------- события ----------
 
@@ -336,7 +348,7 @@ export class Component {
 
   // ---------- удобства для скриптов ----------
 
-  /** Найти объект сцены по имени или пути «Платформа/Фонарь 3». @param {string} name */
+  /** Найти объект сцены по имени или пути «Двор/Фонарь 3». @param {string} name */
   find(name) { return this.engine.scene.find(name); }
 
   /**

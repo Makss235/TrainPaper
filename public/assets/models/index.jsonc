@@ -101,16 +101,16 @@
 
   "aliases": {
     // ---- детальные модели (examples/) — раскомментируйте, чтобы включить ----
-    // "trains/coach-fpk": "examples/trains/coach-fpk.js",
-    // "trains/coach-double": "examples/trains/coach-double.js",
-    // "trains/loco-ep": "examples/trains/loco-ep.js",
-    // "trains/loco-freight": "examples/trains/loco-freight.js",
-    // "trains/emu-head": "examples/trains/emu-head.js",
-    // "trains/emu-middle": "examples/trains/emu-middle.js",
-    // "trains/boxcar": "examples/trains/boxcar.js",
-    // "trains/tank": "examples/trains/tank.js",
-    // "trains/gondola": "examples/trains/gondola.js",
-    // "station/catenary": "examples/catenary.js",
+    "trains/coach-fpk": "examples/trains/coach-fpk.js",
+    "trains/coach-double": "examples/trains/coach-double.js",
+    "trains/loco-ep": "examples/trains/loco-ep.js",
+    "trains/loco-freight": "examples/trains/loco-freight.js",
+    "trains/emu-head": "examples/trains/emu-head.js",
+    "trains/emu-middle": "examples/trains/emu-middle.js",
+    "trains/boxcar": "examples/trains/boxcar.js",
+    "trains/tank": "examples/trains/tank.js",
+    "trains/gondola": "examples/trains/gondola.js",
+    "station/catenary": "examples/catenary.js",
 
     // ---- своя модель из Blender вместо примитива ----
     // "trains/coach-fpk": "my/coach-fpk.glb"

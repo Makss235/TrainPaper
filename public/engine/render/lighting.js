@@ -33,7 +33,6 @@ export function createLightUniforms(style) {
     // источники света: текстура данных TEXELS × LIGHT_CAPACITY (см. setLights), активных — uLightCount
     uLightTex: { value: createLightTexture() },
     uLightCount: { value: 0 },
-    uLightTexH: { value: LIGHT_CAPACITY },
     // тени от прожекторов (spot): две карты глубины, матрицы мир → карта, параметры (вкл., сдвиг, тексель)
     uSpotShadow0: { value: /** @type {THREE.Texture | null} */ (null) },
     uSpotShadow1: { value: /** @type {THREE.Texture | null} */ (null) },
@@ -49,7 +48,8 @@ export function createLightUniforms(style) {
     uCoverRange: { value: new THREE.Vector2(40, -40) },
     uShadowMap: { value: /** @type {THREE.Texture | null} */ (null) },
     uShadowMatrix: { value: new THREE.Matrix4() },
-    uShadowParams: { value: V4() },
+    uShadowParams: { value: V4() },                            // включено (1/0), сдвиг глубины, сдвиг по нормали (м), —
+    uShadowTexel: { value: new THREE.Vector2(1 / 2048, 1 / 4096) },   // размер текселя карты (карта прямоугольная)
     uShadowFade: { value: new THREE.Vector2(80, 110) },
     uShadowStyle: { value: new THREE.Vector2(1, 1) },          // сила тени (0…1), мягкость края (множитель)
     uPatA: { value: Array.from({ length: MAX_PATTERNS }, V4) },
@@ -76,7 +76,7 @@ export function updateLight(L, style, env, sunDir, weather, scene) {
   const direct = sunAbove * (.86 + .14 * smoothstep(8, 30, alt)) * weather.sun;
   const warm = env.sunColor.map((/** @type {number} */ c) => c / 255);
   const sunTint = warm.map((/** @type {number} */ c) => c + (1 - c) * .35 * smoothstep(10, 35, alt));
-  // рассеянный свет: цвет неба, разбавленный серым, чтобы платформа не уходила в синеву
+  // рассеянный свет: цвет неба, разбавленный серым, чтобы светлые поверхности не уходили в синеву
   const skyCol = env.top.map((/** @type {number} */ c, /** @type {number} */ i) => c + (env.horizon[i] - c) * .55);
   const gray = (skyCol[0] + skyCol[1] + skyCol[2]) / 3;
   const skyLight = skyCol.map((/** @type {number} */ c) => c * .5 + gray * .5 + 30);
@@ -131,7 +131,8 @@ function createLightTexture() {
 
 /**
  * Записать источники в текстуру данных. Каждый — 4 текселя:
- *   0: позиция xyz, радиус;  1: цвет × яркость, ночной (1/0);  2: направление xyz, cos внешнего угла;
+ *   0: позиция xyz, радиус (−1 у направленного: у него нет радиуса — шейдер не отсекает его по расстоянию);
+ *   1: цвет × яркость, ночной (1/0);  2: направление xyz, cos внешнего угла;
  *   3: вид (0 — точечный, 1 — прожектор, 2 — направленный), cos внутреннего угла, номер карты теней (−1 — нет), —.
  * @param {LightUniforms} L
  * @param {LightData[]} lights  уже отобранные (не больше quality.maxLights)
@@ -141,19 +142,21 @@ export function setLights(L, lights) {
   const n = Math.min(lights.length, LIGHT_CAPACITY);
   for (let i = 0; i < n; i++) {
     const l = lights[i], o = i * TEXELS * 4, d = l.direction || [0, -1, 0];
-    data.set([l.position[0], l.position[1], l.position[2], l.range], o);
-    data.set([l.color[0], l.color[1], l.color[2], l.night ? 1 : 0], o + 4);
-    data.set([d[0], d[1], d[2], l.cosOuter ?? -1], o + 8);
-    data.set([l.kind === "spot" ? 1 : l.kind === "directional" ? 2 : 0, l.cosInner ?? -1, l.shadow ?? -1, 0], o + 12);
+    data[o] = l.position[0]; data[o + 1] = l.position[1]; data[o + 2] = l.position[2];
+    data[o + 3] = l.kind === "directional" ? -1 : l.range;
+    data[o + 4] = l.color[0]; data[o + 5] = l.color[1]; data[o + 6] = l.color[2]; data[o + 7] = l.night ? 1 : 0;
+    data[o + 8] = d[0]; data[o + 9] = d[1]; data[o + 10] = d[2]; data[o + 11] = l.cosOuter ?? -1;
+    data[o + 12] = l.kind === "spot" ? 1 : l.kind === "directional" ? 2 : 0;
+    data[o + 13] = l.cosInner ?? -1; data[o + 14] = l.shadow ?? -1; data[o + 15] = 0;
   }
   L.uLightCount.value = n;
-  tex.needsUpdate = true;
+  if (n) tex.needsUpdate = true;                        // нет источников — шейдер текстуру не читает
 }
 
 /**
- * Тени-узоры (ограды): плоскость x = const с прутьями, стойками и перилами — в мировых координатах.
+ * Тени-узоры (решётки): плоскость x = const с прутьями, стойками и поперечинами — в мировых координатах.
  * @param {LightUniforms} L
- * @param {{x: number, y0: number, y1: number, step: number, bar: number, postStep: number, post: number, rail: number, rails: number[], from: number, to: number}[]} patterns
+ * @param {{x: number, y0: number, y1: number, step: number, bar: number, postStep: number, post: number, crossbar: number, crossbars: number[], from: number, to: number}[]} patterns
  */
 export function setPatternShadows(L, patterns) {
   for (let i = 0; i < MAX_PATTERNS; i++) {
@@ -161,7 +164,7 @@ export function setPatternShadows(L, patterns) {
     const A = L.uPatA.value[i], B = L.uPatB.value[i], C = L.uPatC.value[i];
     if (!p) { A.set(0, 0, 0, 0); continue; }
     A.set(p.x, p.y0, p.y1, p.step);
-    B.set(p.bar, p.postStep, p.post, p.rail);
-    C.set(p.from, p.to, p.rails[0], p.rails[1]);
+    B.set(p.bar, p.postStep, p.post, p.crossbar);
+    C.set(p.from, p.to, p.crossbars[0], p.crossbars[1]);
   }
 }

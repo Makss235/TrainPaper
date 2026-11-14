@@ -132,9 +132,7 @@ const FRAGMENT = /* glsl */`
         cloudA = max(cloudA, cir);
       }
     }
-    // за облаками солнечный диск не виден
-    float disc = smoothstep(.99955, .99975, s) * uSunVis * (1.0 - cloudA * .92);
-    col = mix(col, uSunColor * 1.15 + .15, disc);
+    // сам солнечный диск рисует сборка кадра (render/composite.js): ровным кругом на экране и в полном разрешении
     gl_FragColor = vec4(col, cloudA);
   }
 `;
@@ -206,8 +204,13 @@ export class SkyLayer {
     this.uniforms.uTime.value = seconds;
   }
 
+  dispose() {
+    this.quad.geometry.dispose();
+    this.material.dispose();
+  }
+
   render(renderer, target, camera) {
-    this.uniforms.uInvProj.value.copy(camera.projectionMatrixInverse);
+    this.uniforms.uInvProj.value.copy(camera.userData.skyProjectionInverse || camera.projectionMatrixInverse);   // лучи неба — см. CameraSystem.layout
     this.uniforms.uCamRot.value.extractRotation(camera.matrixWorld);
     renderer.setRenderTarget(target);
     renderer.render(this.scene, this.ortho);

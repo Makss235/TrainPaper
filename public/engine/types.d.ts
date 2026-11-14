@@ -112,6 +112,7 @@ export interface EngineEvents {
   environment: [info: { env: any; celestial: any; light: any }];
   cameraChanged: [camera: Component];
   frame: [layers: Set<string>];
+  resize: [size: { width: number; height: number }];
   contextRestored: [];
 }
 

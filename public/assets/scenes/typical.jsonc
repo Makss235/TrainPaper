@@ -4,13 +4,15 @@
 //
 // Координаты — метры: x — поперёк пути (вправо), y — вверх от головки рельса, z — вдоль пути;
 // камера у z = 0 смотрит в сторону −z. Пол платформы — на высоте 1,1.
-// Станция конечная: платформа 250 м (от z = 6 до −244), за ней пути и сеть уходят к горизонту.
+// Платформа короткая, 100 м (от z = 6 до −94): её конец виден — пандус на торце и пешеходный мост сразу за ним;
+// дальше к горизонту уходят только пути и контактная сеть.
 // Справочник объектов и компонентов — docs/objects.md, как собрать сцену — docs/scenes.md.
 {
   "name": "Типовая платформа",
   "environment": {
     "azimuth": 250,                                   // куда по компасу смотрит ось −z (солнце, тени)
     "weather": "partly",                              // погода по умолчанию (если пользователь не выбрал)
+    "planes": true,                                   // изредка высоко пролетает самолёт со шлейфом
     "shadows": { "x": [-18, 18], "y": [-1, 14], "z": [14, -110] }
   },
   "objects": [
@@ -37,7 +39,7 @@
     { "name": "Деревья справа", "position": [18, -0.32, -25],
       "repeat": { "count": 61, "step": [0, 0, -11], "jitter": [2.5, 0, 2], "scaleJitter": 0.25, "seed": 29 },
       "components": [{ "type": "Model", "model": "environment/tree", "params": { "color": "tree3", "seed": 2 } }] },
-    { "name": "Пешеходный мост", "position": [3, 0, -165], "components": [{ "type": "Model", "model": "station/footbridge", "params": { "piers": [-12, 12] } }] },
+    { "name": "Пешеходный мост", "position": [3, 0, -102], "components": [{ "type": "Model", "model": "station/footbridge", "params": { "piers": [-12, 12] } }] },
 
     // ---------- пути и контактная сеть (уходят к горизонту) ----------
     // ось пути — от z = 300 (за спиной камеры) к горизонту; поезда видны на участке visible (s, м от начала оси)
@@ -54,12 +56,13 @@
 
     // ---------- платформа (конечной длины) ----------
     { "name": "Платформа", "position": [-0.85, 0, 6],
-      "components": [{ "type": "Model", "model": "station/platform", "params": { "length": 250, "width": 6.7, "edges": ["+x"] }, "castShadow": false }] },
-    { "name": "Ограда", "prefab": "fence", "position": [-4.2, 1.1, 4] },
+      "components": [{ "type": "Model", "model": "station/platform", "params": { "length": 100, "width": 6.7, "edges": ["+x"] }, "castShadow": false }] },
+    { "name": "Ограда", "prefab": "fence", "position": [-4.2, 1.1, 4],
+      "components": [{ "type": "Model", "params": { "length": 98 } }, { "type": "StripeShadow", "length": 98 }] },
     { "name": "Фонарь у входа", "prefab": "lamp", "position": [-3.56, 1.1, 6] },
-    { "name": "Фонарь", "prefab": "lamp", "position": [-3.56, 1.1, -14], "repeat": { "count": 10, "step": [0, 0, -24] } },
+    { "name": "Фонарь", "prefab": "lamp", "position": [-3.56, 1.1, -14], "repeat": { "count": 4, "step": [0, 0, -24] } },
     { "name": "Табло", "prefab": "departure-board", "position": [-1.8, 1.1, -6.3] },
-    { "name": "Скамейка", "prefab": "bench", "position": [-3.55, 1.1, -20], "rotation": [0, 90, 0], "repeat": { "count": 5, "step": [0, 0, -24] } },
+    { "name": "Скамейка", "prefab": "bench", "position": [-3.55, 1.1, -20], "rotation": [0, 90, 0], "repeat": { "count": 3, "step": [0, 0, -24] } },
 
     // ---------- движение поездов (rail/: менеджер, расписание, табло РЖД как источник) ----------
     { "name": "Движение", "components": [
@@ -69,9 +72,10 @@
       // уходит дальше — мимо камеры
       { "type": "RzdBoard", "track": "Путь 1", "motion": { "brake": 1.2, "accel": 0.6 },
         "arrival": { "stop": "Платформа 1", "direction": -1, "approach": 420 },
-        "departure": { "stop": "Платформа 1", "direction": -1, "approach": 420 } }
-      // транзитный грузовой по второму пути раз в 4–12 минут — раскомментируйте (скрипт assets/scripts/rail/random-traffic.js):
-      // , { "type": "rail/random-traffic", "consists": ["freight"], "tracks": ["Путь 2"], "direction": 1, "every": [240, 720], "speed": [15, 25], "first": 30 }
+        "departure": { "stop": "Платформа 1", "direction": -1, "approach": 420 } },
+      // транзитный грузовой по соседнему пути раз в 4–12 минут (скрипт assets/scripts/rail/random-traffic.js);
+      // не нужен — удалите эту строку
+      { "type": "rail/random-traffic", "consists": ["freight"], "tracks": ["Путь 2"], "direction": 1, "every": [240, 720], "speed": [15, 25], "first": 30 }
     ] }
   ]
 }

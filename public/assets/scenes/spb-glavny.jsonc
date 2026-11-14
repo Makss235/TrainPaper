@@ -3,13 +3,14 @@
 // Камера у начала платформы (здание вокзала и упоры — за спиной) смотрит наружу, на юго-восток.
 // На тупиковом вокзале поезд приходит локомотивом вперёд — к упорам за спиной — и стоит хвостом
 // к выходу; отправляющийся стоит локомотивом к горизонту и уходит туда же (departure.heading = −1).
-// Станция конечная: платформы 330 м, навесы ~200 м; пути и сеть уходят к горизонту.
+// Платформы короткие, 140 м, навесы ~100 м: концы платформ видны; дальше — только пути и сеть.
 // Свою модель вокзала поставьте объектом { "components": [{ "type": "Model", "model": "spb/station.glb" }] }.
 {
   "name": "Санкт-Петербург-Главный",
   "environment": {
     "azimuth": 135,
     "weather": "partly",
+    "planes": true,                                   // изредка высоко пролетает самолёт со шлейфом
     "shadows": { "x": [-16, 22], "y": [-1, 12], "z": [16, -120] }
   },
   "objects": [
@@ -46,18 +47,18 @@
 
     // ---------- наша островная платформа с навесом ----------
     { "name": "Платформа 1", "position": [-2.2, 0, 30],
-      "components": [{ "type": "Model", "model": "station/platform", "params": { "length": 330, "width": 9.4, "edges": ["-x", "+x"] }, "castShadow": false }] },
+      "components": [{ "type": "Model", "model": "station/platform", "params": { "length": 140, "width": 9.4, "edges": ["-x", "+x"] }, "castShadow": false }] },
     { "name": "Навес 1", "position": [-2.2, 1.1, 28],
-      "components": [{ "type": "Model", "model": "station/canopy", "params": { "width": 8.4, "length": 203, "height": 4.4, "columns": [0] } }] },
-    { "name": "Светильник навеса 1", "prefab": "canopy-lamp", "position": [-2.2, 5.5, 21], "repeat": { "count": 19, "step": [0, 0, -10.5] } },
+      "components": [{ "type": "Model", "model": "station/canopy", "params": { "width": 8.4, "length": 100, "height": 4.4, "columns": [0] } }] },
+    { "name": "Светильник навеса 1", "prefab": "canopy-lamp", "position": [-2.2, 5.5, 21], "repeat": { "count": 9, "step": [0, 0, -10.5] } },
     { "name": "Табло", "prefab": "departure-board", "position": [0.5, 1.1, -9.5] },
 
     // ---------- соседняя островная платформа ----------
     { "name": "Платформа 2", "position": [15.86, 0, 30],
-      "components": [{ "type": "Model", "model": "station/platform", "params": { "length": 330, "width": 8.28, "edges": ["-x", "+x"] }, "castShadow": false }] },
+      "components": [{ "type": "Model", "model": "station/platform", "params": { "length": 140, "width": 8.28, "edges": ["-x", "+x"] }, "castShadow": false }] },
     { "name": "Навес 2", "position": [15.86, 1.1, 28],
-      "components": [{ "type": "Model", "model": "station/canopy", "params": { "width": 7.3, "length": 190, "height": 4.4, "columns": [0] } }] },
-    { "name": "Светильник навеса 2", "prefab": "canopy-lamp", "position": [15.86, 5.5, 21], "repeat": { "count": 18, "step": [0, 0, -10.5] } },
+      "components": [{ "type": "Model", "model": "station/canopy", "params": { "width": 7.3, "length": 92, "height": 4.4, "columns": [0] } }] },
+    { "name": "Светильник навеса 2", "prefab": "canopy-lamp", "position": [15.86, 5.5, 21], "repeat": { "count": 8, "step": [0, 0, -10.5] } },
 
     // ---------- точки остановки ----------
     // прибывший стоит хвостом в 7,2 м от камеры (локомотив — к упорам за спиной);
@@ -73,8 +74,9 @@
       { "type": "Schedule" },
       { "type": "RzdBoard", "track": "Путь 1", "motion": { "brake": 1.2, "accel": 0.6 },
         "arrival": { "stop": "Платформа 1", "direction": -1, "approach": 460 },
-        "departure": { "stop": "Отправление", "direction": 1 } }
-      // , { "type": "rail/random-traffic", "consists": ["emu-fast"], "tracks": ["Путь 4"], "direction": 1, "every": [300, 900], "speed": [8, 10], "first": 60 }
+        "departure": { "stop": "Отправление", "direction": 1 } },
+      // движение по соседнему пути раз в 5–15 минут: грузовые (и изредка электропоезд), в обе стороны; не нужно — удалите эту строку
+      { "type": "rail/random-traffic", "consists": ["freight", "freight", "emu-fast"], "tracks": ["Путь 2"], "direction": 0, "every": [300, 900], "speed": [9, 13], "first": 45 }
     ] }
   ]
 }

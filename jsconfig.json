@@ -16,5 +16,5 @@
     "useUnknownInCatchVariables": false
   },
   "include": ["public/engine/**/*.js", "public/engine/**/*.d.ts", "public/assets/**/*.js", "tools/**/*.js", "types/**/*.d.ts"],
-  "exclude": ["public/assets/vendor/**", "server/**"]
+  "exclude": ["public/vendor/**", "server/**"]
 }

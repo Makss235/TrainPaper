@@ -10,7 +10,7 @@
 //     "position": [x, y, z],            // метры
 //     "rotation": [x, y, z],            // градусы, порядок YXZ
 //     "scale": 1 | [x, y, z],
-//     "tags": ["platform"], "active": true, "static": true,
+//     "tags": ["ground"], "active": true, "static": true,
 //     "components": [{ "type": "Model", "model": "lamp-post" }],
 //     "children": [ …такие же объекты… ],
 //     "repeat": { "count": 14, "step": [0, 0, -24] }   // копии со сдвигом (см. expandRepeat)
@@ -39,39 +39,57 @@ export class Scene {
     /** @type {Record<string, any>} */
     this.settings = {};
     this.started = false;
+    /** Идёт clear(): объекты удаляются все разом (системам не нужно искать замену каждому) */
+    this.clearing = false;
+    /** Номер загрузки: если, пока сцена готовилась, попросили другую — первая не применяется */
+    this.loadId = 0;
     this.batches = new THREE.Group();
     this.batches.name = "batches";
     this.root.object3D.add(this.batches);
-    this.batchTimer = 0;
+    /** Неподвижные объекты менялись — склейку надо пересобрать перед кадром */
+    this.batchDirty = false;
   }
 
   get object3D() { return this.root.object3D; }
 
   /**
    * Загрузить сцену из адреса JSONC или объекта данных. Старое содержимое удаляется.
+   * Всё, что нужно новой сцене (префабы, модели, скрипты), загружается ДО удаления старой: прежняя сцена
+   * остаётся на экране, пока новая готовится, и кадра «небо без сцены» не бывает. Если за это время
+   * попросили загрузить другую сцену, эта загрузка отменяется (применяется только последняя).
    * @param {string | Record<string, any>} source
+   * @returns {Promise<boolean>} true — сцена загружена; false — её опередила более новая загрузка
    */
   async load(source) {
+    const id = ++this.loadId;
     const data = typeof source === "string" ? await loadData(source) : source;
     await this.engine.assets.ready();
+    const objects = await this.resolve(data.objects || []);
+    await this.preload(objects);
+    if (id !== this.loadId) return false;
     this.clear();
     this.data = data;
     this.settings = data.environment || {};
-    // сначала всё, что нужно загрузить заранее: префабы, модели, файлы
-    const objects = await this.resolve(data.objects || []);
-    await this.preload(objects);
-    for (const od of objects) this.root.add(this.instantiate(od));
+    const created = objects.map(od => this.root.add(this.instantiate(od)));
+    // корень сцены живёт между загрузками (он уже «проснулся»), поэтому будим сами объекты:
+    // сначала awake() у всех, потом start() у всех — в start() уже можно искать соседей
     this.started = true;
-    this.root.awake();
-    this.root.start();
+    for (const go of created) go.awake();
+    for (const go of created) go.start();
     this.engine.events.emit("sceneLoaded", this);
     this.rebatch();
-    return this;
+    return true;
   }
 
   /** Удалить все объекты. */
   clear() {
-    for (const c of [...this.root.children]) c.destroy();
+    this.loadId++;                                      // загрузка, которая ещё готовится, уже не нужна
+    this.clearing = true;
+    try {
+      for (const c of [...this.root.children]) c.destroy();
+    } finally {
+      this.clearing = false;
+    }
     this.#unbatch();
     this.started = false;
   }
@@ -207,11 +225,20 @@ export class Scene {
 
   // ---------- склейка неподвижных мешей ----------
 
-  /** Неподвижный объект изменился — пересобрать склейку (не чаще раза за кадр). @param {GameObject} [go] */
+  /**
+   * Неподвижный объект изменился — склейка пересоберётся перед ближайшим кадром (один раз, сколько бы
+   * объектов ни поменялось). @param {GameObject} [go]
+   */
   markDirty(go) {
     if (go && !go.static) return;
-    if (!this.started || this.batchTimer) return;
-    this.batchTimer = requestAnimationFrame(() => { this.batchTimer = 0; this.rebatch(); });
+    if (!this.started) return;
+    this.batchDirty = true;
+    this.engine.invalidate("scene", "shadow");
+  }
+
+  /** Перед кадром (вызывает движок): пересобрать склейку, если неподвижные объекты менялись. */
+  flush() {
+    if (this.batchDirty) this.#batch();
   }
 
   #unbatch() {
@@ -220,8 +247,14 @@ export class Scene {
     this.object3D.traverse(o => { if (o.userData.batched) { o.visible = true; o.userData.batched = false; } });
   }
 
-  /** Склеить одинаковые неподвижные меши в instanced-меши. */
+  /** Склеить одинаковые неподвижные меши в instanced-меши (и перерисовать сцену). */
   rebatch() {
+    this.#batch();
+    this.engine.invalidate("scene", "shadow");
+  }
+
+  #batch() {
+    this.batchDirty = false;
     this.#unbatch();
     if (this.engine.options.batching === false) return;
     this.object3D.updateMatrixWorld(true);
@@ -258,6 +291,5 @@ export class Scene {
       inst.userData.noBatch = true;
       this.batches.add(inst);
     }
-    this.engine.invalidate("scene", "shadow");
   }
 }

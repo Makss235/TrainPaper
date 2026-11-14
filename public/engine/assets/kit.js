@@ -80,7 +80,7 @@ export function createKit(engine) {
     sphere: (radius, o) => primitive("sphere", [radius * 2, radius * 2, radius * 2], { material: { toon: true, snow: true }, ...o }),
     plane: (size, o = {}) => {
       if (!o.uvMeters) return primitive("plane", size, o);
-      // плоскость с uv в метрах от центра (для узоров, привязанных к поверхности: шпалы)
+      // плоскость с uv в метрах от центра (для узоров, привязанных к поверхности: pattern "slats")
       const g = new THREE.PlaneGeometry(size[0], size[1]);
       g.rotateX(-Math.PI / 2);
       const pos = g.attributes.position, uv = g.attributes.uv;

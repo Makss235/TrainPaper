@@ -53,7 +53,7 @@ export default {
     };
     g.add(kit.mesh(geo(body, null), { color: "ballast", material: { snow: true } }));
     g.add(kit.mesh(geo(top, topUv), { color: "ballast",
-      material: { snow: true, patternShadows: true, pattern: { type: "sleepers", half: 1.35, step: .55, width: .26, color: "sleeper" } } }));
+      material: { snow: true, patternShadows: true, pattern: { type: "slats", half: 1.35, step: .55, width: .26, color: "sleeper" } } }));
 
     // рельсы: шейка — в тени, головка — светлая полоса. Длинные прямые режутся на куски, растущие с расстоянием
     const lines = kit.lines(), h = p.gauge / 2;

@@ -22,8 +22,8 @@ export const GLOW_VERTEX = /* glsl */`
   void main(){
     vec4 v = viewMatrix * modelMatrix * vec4(aCenter, 1.0);
     float r = aGlow.a;
-    float focal = projectionMatrix[1][1] * uRes.y * .5;
-    float px = r * focal / max(-v.z, .01);
+    // размер в пикселях — через w после проекции: верно и для перспективы, и для ортографии
+    float px = r * projectionMatrix[1][1] * uRes.y * .5 / max((projectionMatrix * v).w, .01);
     float k = mix(1.0, uLamps, aNight);
     k *= smoothstep(.6, 2.5, px);                                 // крошечные ореолы гаснут
     // дальние огни гаснут: у точки схода десятки ореолов иначе складываются в яркую полосу
